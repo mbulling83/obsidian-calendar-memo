@@ -54,6 +54,7 @@ fun CalendarScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().height(CALENDAR_SECTION_HEIGHT)) {
             Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+                // calendar takes ~1/3 of the width
                 CalendarView(
                     yearMonth = YearMonth.from(uiState.date),
                     selectedDate = uiState.date,
@@ -64,7 +65,8 @@ fun CalendarScreen(
                 )
             }
             VerticalDivider(modifier = Modifier.fillMaxHeight(), thickness = 2.dp)
-            Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
+            Column(modifier = Modifier.weight(2f).fillMaxHeight()) {
+                // agenda takes ~2/3 of the width
                 DayEventList(
                     date = uiState.date,
                     events = uiState.events,
