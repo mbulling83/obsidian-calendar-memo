@@ -25,9 +25,10 @@ fun MemoCanvas(
     isEraserActive: Boolean,
     onStrokeFinished: (StrokePath) -> Unit,
     onStrokesErased: (List<StrokePath>) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     AndroidView(
-        modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+        modifier = modifier.fillMaxWidth().fillMaxHeight(),
         factory = { context ->
             OnyxInkSurfaceView(context, strokes, penSettings, guidelineStyle, onStrokeFinished, onStrokesErased)
         },

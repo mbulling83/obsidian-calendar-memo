@@ -102,7 +102,21 @@ class OnyxInkSurfaceView(
         }
     }
 
-    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
+    override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+        // A resize (e.g. collapsing the side-by-side notes pane widens the
+        // canvas) hands us a fresh, unpainted surface buffer — left untouched
+        // it shows as a black box. Repaint our strokes/guidelines and move the
+        // raw-drawing input region to the new bounds so the pen still maps.
+        val helper = touchHelper
+        if (helper == null) {
+            redrawExistingStrokes(holder)
+            return
+        }
+        helper.setRawDrawingEnabled(false)
+        helper.setLimitRect(Rect(0, 0, width, height), ArrayList())
+        redrawExistingStrokes(holder)
+        helper.setRawDrawingEnabled(true)
+    }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
         touchHelper?.setRawDrawingEnabled(false)

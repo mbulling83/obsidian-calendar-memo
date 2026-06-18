@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -81,6 +83,7 @@ fun MemoSection(
 ) {
     var isEraserActive by remember { mutableStateOf(false) }
     var guidelineStyle by remember { mutableStateOf(GuidelineStyle.None) }
+    var columnSplit by rememberSaveable { mutableStateOf(false) }
     var version by remember(date) { mutableIntStateOf(0) }
 
     // Reading `version` here makes the whole composable recompose on every
@@ -88,6 +91,12 @@ fun MemoSection(
     @Suppress("UNUSED_EXPRESSION")
     version
     val strokes = strokeStore.strokesFor(date, selectedScope)
+
+    val selectedMeeting = (selectedScope as? CaptureScope.Meeting)
+        ?.let { scope -> meetings.find { it.entry.startTime == scope.startTime } }
+    val detailLines = selectedMeeting?.entry?.detailLines.orEmpty()
+    val hasDetailLines = detailLines.isNotEmpty()
+    var notesExpanded by rememberSaveable(detailLines.firstOrNull()) { mutableStateOf(true) }
 
     Column(modifier = modifier.fillMaxWidth().fillMaxHeight().padding(8.dp)) {
         Row(
@@ -135,6 +144,14 @@ fun MemoSection(
                 version++
             }
 
+            if (hasDetailLines) {
+                FilterChip(
+                    selected = columnSplit,
+                    onClick = { columnSplit = !columnSplit },
+                    label = { Text("Split") },
+                )
+            }
+
             FilterChip(
                 selected = isEraserActive,
                 onClick = { isEraserActive = !isEraserActive },
@@ -142,39 +159,72 @@ fun MemoSection(
             )
         }
 
-        val selectedMeeting = (selectedScope as? CaptureScope.Meeting)
-            ?.let { scope -> meetings.find { it.entry.startTime == scope.startTime } }
-        if (selectedMeeting != null && selectedMeeting.entry.detailLines.isNotEmpty()) {
-            AlreadyNotedBlock(selectedMeeting.entry.detailLines)
+        val canvas: @Composable (Modifier) -> Unit = { canvasModifier ->
+            key(date, selectedScope, penSettings) {
+                MemoCanvas(
+                    strokes = strokeStore.strokesFor(date, selectedScope),
+                    penSettings = penSettings,
+                    guidelineStyle = guidelineStyle,
+                    isEraserActive = isEraserActive,
+                    onStrokeFinished = { stroke ->
+                        strokeStore.addStroke(date, selectedScope, stroke)
+                        version++
+                    },
+                    onStrokesErased = { remaining ->
+                        strokeStore.setStrokes(date, selectedScope, remaining)
+                        version++
+                    },
+                    modifier = canvasModifier,
+                )
+            }
         }
 
-        key(date, selectedScope, penSettings) {
-            MemoCanvas(
-                strokes = strokeStore.strokesFor(date, selectedScope),
-                penSettings = penSettings,
-                guidelineStyle = guidelineStyle,
-                isEraserActive = isEraserActive,
-                onStrokeFinished = { stroke ->
-                    strokeStore.addStroke(date, selectedScope, stroke)
-                    version++
-                },
-                onStrokesErased = { remaining ->
-                    strokeStore.setStrokes(date, selectedScope, remaining)
-                    version++
-                },
-            )
+        if (hasDetailLines && columnSplit) {
+            // Side-by-side: notes take the left half, canvas the right half.
+            // When collapsed, the notes column shrinks to its header so the
+            // canvas reclaims the freed width.
+            Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                val notesModifier = if (notesExpanded) {
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                        .padding(end = 8.dp)
+                } else {
+                    Modifier.padding(end = 8.dp)
+                }
+                AlreadyNotedBlock(
+                    detailLines = detailLines,
+                    expanded = notesExpanded,
+                    onToggleExpanded = { notesExpanded = !notesExpanded },
+                    modifier = notesModifier,
+                )
+                canvas(Modifier.weight(1f).fillMaxHeight())
+            }
+        } else {
+            if (hasDetailLines) {
+                AlreadyNotedBlock(
+                    detailLines = detailLines,
+                    expanded = notesExpanded,
+                    onToggleExpanded = { notesExpanded = !notesExpanded },
+                )
+            }
+            canvas(Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-private fun AlreadyNotedBlock(detailLines: List<String>) {
-    var expanded by rememberSaveable(detailLines.firstOrNull()) { mutableStateOf(true) }
-
-    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+private fun AlreadyNotedBlock(
+    detailLines: List<String>,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.padding(vertical = 4.dp)) {
         Row(
             modifier = Modifier
-                .clickable { expanded = !expanded }
+                .clickable { onToggleExpanded() }
                 .padding(vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
