@@ -81,18 +81,19 @@ fun CalendarScreen(
             meetings = meetings,
             strokeStore = strokeStore,
             penSettings = penSettings,
-        ) { scope, strokes, _ ->
-            ConversionActions(
-                date = uiState.date,
-                scope = scope,
-                strokes = strokes,
-                dailyNoteRepository = dailyNoteRepository,
-                recognitionMethodPreference = recognitionMethodPreference,
-                onConverted = {
-                    strokeStore.clear(uiState.date, scope)
-                    viewModel.selectDate(uiState.date)
-                },
-            )
-        }
+            toolbarContent = { scope, strokes ->
+                ConversionActions(
+                    date = uiState.date,
+                    scope = scope,
+                    strokes = strokes,
+                    dailyNoteRepository = dailyNoteRepository,
+                    recognitionMethodPreference = recognitionMethodPreference,
+                    onConverted = {
+                        strokeStore.clear(uiState.date, scope)
+                        viewModel.selectDate(uiState.date)
+                    },
+                )
+            },
+        )
     }
 }

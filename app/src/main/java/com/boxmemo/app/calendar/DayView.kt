@@ -12,10 +12,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.AnnotatedString
@@ -30,9 +26,6 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 private val AGENDA_DATE_FORMAT = DateTimeFormatter.ofPattern("EEE d MMM", Locale.ENGLISH)
-
-// Matches leading whitespace + "- " to strip the raw Markdown prefix from detail lines.
-private val DETAIL_PREFIX = Regex("""^[\t ]*-\s""")
 
 private val WIKI_LINK = Regex("""\[\[([^\]]+)]]""")
 
@@ -119,13 +112,10 @@ private fun ObsidianMeetingRow(
     selectedScope: CaptureScope,
     onScopeSelected: (CaptureScope) -> Unit,
 ) {
-    val bullets = event.entry.detailLines
-    val hasBullets = bullets.isNotEmpty()
-    var expanded by rememberSaveable(event.entry.startTime) { mutableStateOf(true) }
     val scope = CaptureScope.Meeting(event.entry.startTime)
     val isSelected = selectedScope == scope
 
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onScopeSelected(scope) }
@@ -135,51 +125,23 @@ private fun ObsidianMeetingRow(
             )
             .padding(vertical = 4.dp, horizontal = 4.dp),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(if (hasBullets) Modifier.clickable { expanded = !expanded } else Modifier)
-                .padding(vertical = 2.dp),
-        ) {
-            Text(
-                text = if (isSelected) "▶" else "  ",
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(end = 4.dp),
-            )
-            Text(
-                text = event.startTime.toString(),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(text = "  ")
-            Text(
-                text = renderWikiLinks(
-                    if (hasBullets) "${if (expanded) "▾" else "▸"} ${event.title}"
-                    else event.title
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-            )
-        }
-        if (hasBullets && expanded) {
-            Column(modifier = Modifier.padding(start = 16.dp, bottom = 2.dp)) {
-                bullets.forEach { rawLine ->
-                    val text = DETAIL_PREFIX.replace(rawLine.trimStart('\t'), "")
-                    Row(modifier = Modifier.padding(vertical = 1.dp)) {
-                        Text(
-                            text = "•",
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(end = 6.dp),
-                        )
-                        Text(
-                            text = renderWikiLinks(text),
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
-            }
-        }
+        Text(
+            text = if (isSelected) "▶" else "  ",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(end = 4.dp),
+        )
+        Text(
+            text = event.startTime.toString(),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(text = "  ")
+        Text(
+            text = renderWikiLinks(event.title),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+        )
     }
 }
 

@@ -36,6 +36,7 @@ class OnyxInkSurfaceView(
     context: Context,
     initialStrokes: List<StrokePath>,
     private val penSettings: PenSettings,
+    private val guidelineStyle: GuidelineStyle,
     private val onStrokeFinished: (StrokePath) -> Unit,
     private val onStrokesErased: (List<StrokePath>) -> Unit,
 ) : SurfaceView(context), SurfaceHolder.Callback {
@@ -87,6 +88,47 @@ class OnyxInkSurfaceView(
         touchHelper = null
     }
 
+    private val guidelinePaint = Paint().apply {
+        color = Color.LTGRAY
+        strokeWidth = 1.5f
+        style = Paint.Style.STROKE
+        isAntiAlias = false
+    }
+
+    private fun drawGuidelines(canvas: android.graphics.Canvas) {
+        if (guidelineStyle == GuidelineStyle.None) return
+        val density = resources.displayMetrics.density
+        val spacing = 40 * density
+        when (guidelineStyle) {
+            GuidelineStyle.Lines -> {
+                var y = spacing
+                while (y < height) {
+                    canvas.drawLine(0f, y, width.toFloat(), y, guidelinePaint)
+                    y += spacing
+                }
+            }
+            GuidelineStyle.DotGrid -> {
+                val dotPaint = Paint().apply {
+                    color = Color.LTGRAY
+                    strokeWidth = 3f
+                    strokeCap = Paint.Cap.ROUND
+                    style = Paint.Style.STROKE
+                    isAntiAlias = true
+                }
+                var y = spacing
+                while (y < height) {
+                    var x = spacing
+                    while (x < width) {
+                        canvas.drawPoint(x, y, dotPaint)
+                        x += spacing
+                    }
+                    y += spacing
+                }
+            }
+            GuidelineStyle.None -> Unit
+        }
+    }
+
     private fun redrawExistingStrokes(holder: SurfaceHolder) {
         val canvas = try {
             holder.lockCanvas()
@@ -95,6 +137,7 @@ class OnyxInkSurfaceView(
         } ?: return
         try {
             canvas.drawColor(Color.WHITE)
+            drawGuidelines(canvas)
             for (stroke in currentStrokes) {
                 if (stroke.size < 2) continue
                 val path = android.graphics.Path().apply {

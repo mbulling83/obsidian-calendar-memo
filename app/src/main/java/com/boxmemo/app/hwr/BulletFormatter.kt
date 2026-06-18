@@ -8,9 +8,9 @@ private val SENTENCE_SPLIT = Regex("""(?<=[.!?])\s+""")
  * single bullet.
  */
 fun formatAsBullets(text: String): List<String> {
-    val trimmed = text.trim()
-    if (trimmed.isEmpty()) return emptyList()
-    return trimmed.split(SENTENCE_SPLIT).map { it.trim() }.filter { it.isNotEmpty() }
+    val normalized = text.trim().replace(Regex("""\s+"""), " ")
+    if (normalized.isEmpty()) return emptyList()
+    return normalized.split(SENTENCE_SPLIT).map { it.trim() }.filter { it.isNotEmpty() }
 }
 
 /** Nested detail bullets matching the existing tab-indented meeting style. */

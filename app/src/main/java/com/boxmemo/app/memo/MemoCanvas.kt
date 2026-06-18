@@ -22,13 +22,16 @@ import androidx.compose.ui.viewinterop.AndroidView
 fun MemoCanvas(
     strokes: List<StrokePath>,
     penSettings: PenSettings,
+    guidelineStyle: GuidelineStyle,
     isEraserActive: Boolean,
     onStrokeFinished: (StrokePath) -> Unit,
     onStrokesErased: (List<StrokePath>) -> Unit,
 ) {
     AndroidView(
         modifier = Modifier.fillMaxWidth().height(320.dp),
-        factory = { context -> OnyxInkSurfaceView(context, strokes, penSettings, onStrokeFinished, onStrokesErased) },
+        factory = { context ->
+            OnyxInkSurfaceView(context, strokes, penSettings, guidelineStyle, onStrokeFinished, onStrokesErased)
+        },
         update = { view -> view.isEraserActive = isEraserActive },
     )
 }
