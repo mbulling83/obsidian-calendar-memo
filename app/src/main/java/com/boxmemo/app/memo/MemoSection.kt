@@ -11,6 +11,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -32,6 +34,12 @@ fun MemoSection(
     content: @Composable (CaptureScope, List<StrokePath>, (StrokePath) -> Unit) -> Unit = { _, _, _ -> },
 ) {
     var selectedScope by remember(date) { mutableStateOf<CaptureScope>(CaptureScope.Notes) }
+
+    // StrokeStore is a plain (non-Compose-observable) map by design, so it
+    // stays testable as pure Kotlin. `version` is the recomposition trigger:
+    // bumping it after every mutation is what makes a just-finished stroke
+    // actually show up, instead of disappearing the moment the gesture ends.
+    var version by remember(date) { mutableIntStateOf(0) }
 
     Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -63,12 +71,28 @@ fun MemoSection(
             }
         }
 
-        val strokes = strokeStore.strokesFor(date, selectedScope)
-        MemoCanvas(
-            strokes = strokes,
-            onStrokeFinished = { stroke -> strokeStore.addStroke(date, selectedScope, stroke) },
-        )
+        // Keyed on scope only (not version) — the underlying SurfaceView and
+        // its TouchHelper raw-drawing session persist across multiple
+        // strokes within the same scope; recreating it per-stroke would
+        // needlessly tear down and rebind the Onyx pen service every time.
+        key(selectedScope) {
+            MemoCanvas(
+                strokes = strokeStore.strokesFor(date, selectedScope),
+                onStrokeFinished = { stroke ->
+                    strokeStore.addStroke(date, selectedScope, stroke)
+                    version++
+                },
+            )
+        }
 
-        content(selectedScope, strokes) { stroke -> strokeStore.addStroke(date, selectedScope, stroke) }
+        // Keyed on version too — the conversion buttons' enabled state and
+        // the strokes they read need to refresh after every captured stroke.
+        key(selectedScope, version) {
+            val strokes = strokeStore.strokesFor(date, selectedScope)
+            content(selectedScope, strokes) { stroke ->
+                strokeStore.addStroke(date, selectedScope, stroke)
+                version++
+            }
+        }
     }
 }
