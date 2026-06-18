@@ -52,6 +52,17 @@ fun MemoSection(
             }
         }
 
+        // Surface what's already captured for this meeting in Obsidian, so
+        // the user doesn't re-write something already there.
+        val selectedMeeting = (selectedScope as? CaptureScope.Meeting)
+            ?.let { scope -> meetings.find { it.entry.startTime == scope.startTime } }
+        if (selectedMeeting != null && selectedMeeting.entry.detailLines.isNotEmpty()) {
+            Column(modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)) {
+                Text("Already noted:")
+                selectedMeeting.entry.detailLines.forEach { line -> Text(line.trim()) }
+            }
+        }
+
         val strokes = strokeStore.strokesFor(date, selectedScope)
         MemoCanvas(
             strokes = strokes,

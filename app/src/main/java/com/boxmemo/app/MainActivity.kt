@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import com.boxmemo.app.calendar.CalendarScreen
 import com.boxmemo.app.calendar.DayViewModel
 import com.boxmemo.app.gcal.NoOpGoogleCalendarRepository
+import com.boxmemo.app.memo.StrokeStore
 import com.boxmemo.app.quickadd.QuickAddForm
 import com.boxmemo.app.settings.SettingsScreen
 import com.boxmemo.app.settings.VaultPermission
@@ -47,6 +48,7 @@ class MainActivity : ComponentActivity() {
                     val viewModel = remember(dailyNoteRepository) {
                         DayViewModel(dailyNoteRepository, NoOpGoogleCalendarRepository)
                     }
+                    val strokeStore = remember { StrokeStore() }
 
                     var showSettings by remember { mutableStateOf(false) }
                     var showAdd by remember { mutableStateOf(false) }
@@ -56,7 +58,11 @@ class MainActivity : ComponentActivity() {
                             onSettingsClick = { showSettings = true },
                             onAddClick = { showAdd = true },
                         )
-                        CalendarScreen(viewModel = viewModel)
+                        CalendarScreen(
+                            viewModel = viewModel,
+                            dailyNoteRepository = dailyNoteRepository,
+                            strokeStore = strokeStore,
+                        )
                     }
 
                     if (showSettings) {
