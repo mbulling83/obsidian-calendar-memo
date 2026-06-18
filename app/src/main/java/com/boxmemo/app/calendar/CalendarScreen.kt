@@ -11,9 +11,13 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.boxmemo.app.hwr.RecognitionMethodPreference
+import com.boxmemo.app.memo.CaptureScope
 import com.boxmemo.app.memo.ConversionActions
 import com.boxmemo.app.memo.MemoSection
 import com.boxmemo.app.memo.PenSettingsStore
@@ -44,6 +48,9 @@ fun CalendarScreen(
     val uiState by viewModel.uiState.collectAsState()
     val penSettings by penSettingsStore.settings.collectAsState(initial = PenSettings())
 
+    val meetings = uiState.events.filterIsInstance<DayEvent.ObsidianMeeting>()
+    var selectedScope by remember(uiState.date) { mutableStateOf<CaptureScope>(CaptureScope.Notes) }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().height(CALENDAR_SECTION_HEIGHT)) {
             Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
@@ -56,19 +63,21 @@ fun CalendarScreen(
                     onDaySelected = { viewModel.selectDate(it) },
                 )
             }
-            VerticalDivider(modifier = Modifier.fillMaxHeight())
+            VerticalDivider(modifier = Modifier.fillMaxHeight(), thickness = 2.dp)
             Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 DayEventList(
                     date = uiState.date,
                     events = uiState.events,
                     meetingsSectionMissing = uiState.meetingsSectionMissing,
+                    selectedScope = selectedScope,
+                    onScopeSelected = { selectedScope = it },
                 )
             }
         }
-        HorizontalDivider()
-        val meetings = uiState.events.filterIsInstance<DayEvent.ObsidianMeeting>()
+        HorizontalDivider(thickness = 2.dp)
         MemoSection(
             date = uiState.date,
+            selectedScope = selectedScope,
             meetings = meetings,
             strokeStore = strokeStore,
             penSettings = penSettings,

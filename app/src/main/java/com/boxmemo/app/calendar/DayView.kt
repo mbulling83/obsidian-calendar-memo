@@ -1,5 +1,6 @@
 package com.boxmemo.app.calendar
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -14,9 +16,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
+import com.boxmemo.app.memo.CaptureScope
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -26,6 +34,21 @@ private val AGENDA_DATE_FORMAT = DateTimeFormatter.ofPattern("EEE d MMM", Locale
 // Matches leading whitespace + "- " to strip the raw Markdown prefix from detail lines.
 private val DETAIL_PREFIX = Regex("""^[\t ]*-\s""")
 
+private val WIKI_LINK = Regex("""\[\[([^\]]+)]]""")
+
+/** Renders [[Page]] as underlined "Page" with the brackets hidden. */
+private fun renderWikiLinks(text: String): AnnotatedString = buildAnnotatedString {
+    var cursor = 0
+    for (match in WIKI_LINK.findAll(text)) {
+        append(text, cursor, match.range.first)
+        pushStyle(SpanStyle(textDecoration = TextDecoration.Underline))
+        append(match.groupValues[1])
+        pop()
+        cursor = match.range.last + 1
+    }
+    append(text, cursor, text.length)
+}
+
 /**
  * Agenda panel listing the merged Obsidian + Google Calendar events for the
  * selected date, with start times prominent so the day's schedule is
@@ -34,7 +57,13 @@ private val DETAIL_PREFIX = Regex("""^[\t ]*-\s""")
  * meetings (origin R3) without implying they're editable here (origin R4).
  */
 @Composable
-fun DayEventList(date: LocalDate, events: List<DayEvent>, meetingsSectionMissing: Boolean) {
+fun DayEventList(
+    date: LocalDate,
+    events: List<DayEvent>,
+    meetingsSectionMissing: Boolean,
+    selectedScope: CaptureScope = CaptureScope.Notes,
+    onScopeSelected: (CaptureScope) -> Unit = {},
+) {
     Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
         Text(text = date.format(AGENDA_DATE_FORMAT), style = MaterialTheme.typography.titleMedium)
         if (meetingsSectionMissing) {
@@ -44,26 +73,68 @@ fun DayEventList(date: LocalDate, events: List<DayEvent>, meetingsSectionMissing
             Text("No events today", style = MaterialTheme.typography.bodySmall)
         }
         LazyColumn {
-            items(events) { event -> DayEventRow(event) }
+            items(events) { event ->
+                DayEventRow(event, selectedScope, onScopeSelected)
+            }
+            item {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                val isSelected = selectedScope == CaptureScope.Notes
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onScopeSelected(CaptureScope.Notes) }
+                        .then(
+                            if (isSelected) Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
+                            else Modifier
+                        )
+                        .padding(vertical = 6.dp, horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = if (isSelected) "▶ Notes" else "  Notes",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun DayEventRow(event: DayEvent) {
+private fun DayEventRow(
+    event: DayEvent,
+    selectedScope: CaptureScope,
+    onScopeSelected: (CaptureScope) -> Unit,
+) {
     when (event) {
-        is DayEvent.ObsidianMeeting -> ObsidianMeetingRow(event)
+        is DayEvent.ObsidianMeeting -> ObsidianMeetingRow(event, selectedScope, onScopeSelected)
         is DayEvent.FromGoogleCalendar -> GoogleEventRow(event)
     }
 }
 
 @Composable
-private fun ObsidianMeetingRow(event: DayEvent.ObsidianMeeting) {
+private fun ObsidianMeetingRow(
+    event: DayEvent.ObsidianMeeting,
+    selectedScope: CaptureScope,
+    onScopeSelected: (CaptureScope) -> Unit,
+) {
     val bullets = event.entry.detailLines
     val hasBullets = bullets.isNotEmpty()
     var expanded by rememberSaveable(event.entry.startTime) { mutableStateOf(true) }
+    val scope = CaptureScope.Meeting(event.entry.startTime)
+    val isSelected = selectedScope == scope
 
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onScopeSelected(scope) }
+            .then(
+                if (isSelected) Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
+                else Modifier
+            )
+            .padding(vertical = 4.dp, horizontal = 4.dp),
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -71,15 +142,24 @@ private fun ObsidianMeetingRow(event: DayEvent.ObsidianMeeting) {
                 .padding(vertical = 2.dp),
         ) {
             Text(
+                text = if (isSelected) "▶" else "  ",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(end = 4.dp),
+            )
+            Text(
                 text = event.startTime.toString(),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
             )
             Text(text = "  ")
             Text(
-                text = if (hasBullets) "${if (expanded) "▾" else "▸"} ${event.title}"
-                else event.title,
+                text = renderWikiLinks(
+                    if (hasBullets) "${if (expanded) "▾" else "▸"} ${event.title}"
+                    else event.title
+                ),
                 style = MaterialTheme.typography.bodyMedium,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
             )
         }
         if (hasBullets && expanded) {
@@ -93,7 +173,7 @@ private fun ObsidianMeetingRow(event: DayEvent.ObsidianMeeting) {
                             modifier = Modifier.padding(end = 6.dp),
                         )
                         Text(
-                            text = text,
+                            text = renderWikiLinks(text),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -112,6 +192,6 @@ private fun GoogleEventRow(event: DayEvent.FromGoogleCalendar) {
             fontWeight = FontWeight.Bold,
         )
         Text(text = "  ")
-        Text(text = "(Google · ${event.event.calendarName}) ${event.title}")
+        Text(text = renderWikiLinks("(Google · ${event.event.calendarName}) ${event.title}"))
     }
 }
