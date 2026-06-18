@@ -11,7 +11,7 @@ import androidx.compose.ui.viewinterop.AndroidView
  * Drawing surface scoped to a date + [CaptureScope] (a meeting entry, the
  * Notes section, or unscoped). Captures handwriting and diagrams alike —
  * the distinction between the two is made later, when the user manually
- * triggers conversion (U7-U10), not at capture time.
+ * triggers conversion, not at capture time.
  *
  * Backed by [OnyxInkSurfaceView] (Onyx Pen SDK raw drawing), the same
  * low-latency mechanism jdkruzr/aragonite uses — not a Compose `Canvas`
@@ -19,9 +19,16 @@ import androidx.compose.ui.viewinterop.AndroidView
  * recomposition pipeline and was both laggy and prone to losing strokes.
  */
 @Composable
-fun MemoCanvas(strokes: List<StrokePath>, onStrokeFinished: (StrokePath) -> Unit) {
+fun MemoCanvas(
+    strokes: List<StrokePath>,
+    penSettings: PenSettings,
+    isEraserActive: Boolean,
+    onStrokeFinished: (StrokePath) -> Unit,
+    onStrokesErased: (List<StrokePath>) -> Unit,
+) {
     AndroidView(
         modifier = Modifier.fillMaxWidth().height(320.dp),
-        factory = { context -> OnyxInkSurfaceView(context, strokes, onStrokeFinished) },
+        factory = { context -> OnyxInkSurfaceView(context, strokes, penSettings, onStrokeFinished, onStrokesErased) },
+        update = { view -> view.isEraserActive = isEraserActive },
     )
 }

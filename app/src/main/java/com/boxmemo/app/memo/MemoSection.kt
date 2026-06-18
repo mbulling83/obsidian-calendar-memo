@@ -31,9 +31,11 @@ fun MemoSection(
     date: LocalDate,
     meetings: List<DayEvent.ObsidianMeeting>,
     strokeStore: StrokeStore,
+    penSettings: PenSettings,
     content: @Composable (CaptureScope, List<StrokePath>, (StrokePath) -> Unit) -> Unit = { _, _, _ -> },
 ) {
     var selectedScope by remember(date) { mutableStateOf<CaptureScope>(CaptureScope.Notes) }
+    var isEraserActive by remember { mutableStateOf(false) }
 
     // StrokeStore is a plain (non-Compose-observable) map by design, so it
     // stays testable as pure Kotlin. `version` is the recomposition trigger:
@@ -42,22 +44,36 @@ fun MemoSection(
     var version by remember(date) { mutableIntStateOf(0) }
 
     Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            item {
-                FilterChip(
-                    selected = selectedScope == CaptureScope.Notes,
-                    onClick = { selectedScope = CaptureScope.Notes },
-                    label = { Text("Notes") },
-                )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            LazyRow(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                item {
+                    FilterChip(
+                        selected = selectedScope == CaptureScope.Notes,
+                        onClick = { selectedScope = CaptureScope.Notes },
+                        label = { Text("Notes") },
+                    )
+                }
+                items(meetings) { meeting ->
+                    val scope = CaptureScope.Meeting(meeting.entry.startTime)
+                    FilterChip(
+                        selected = selectedScope == scope,
+                        onClick = { selectedScope = scope },
+                        label = { Text(meeting.entry.title) },
+                    )
+                }
             }
-            items(meetings) { meeting ->
-                val scope = CaptureScope.Meeting(meeting.entry.startTime)
-                FilterChip(
-                    selected = selectedScope == scope,
-                    onClick = { selectedScope = scope },
-                    label = { Text(meeting.entry.title) },
-                )
-            }
+            FilterChip(
+                selected = isEraserActive,
+                onClick = { isEraserActive = !isEraserActive },
+                label = { Text("Eraser") },
+            )
         }
 
         // Surface what's already captured for this meeting in Obsidian, so
@@ -75,11 +91,17 @@ fun MemoSection(
         // its TouchHelper raw-drawing session persist across multiple
         // strokes within the same scope; recreating it per-stroke would
         // needlessly tear down and rebind the Onyx pen service every time.
-        key(selectedScope) {
+        key(selectedScope, penSettings) {
             MemoCanvas(
                 strokes = strokeStore.strokesFor(date, selectedScope),
+                penSettings = penSettings,
+                isEraserActive = isEraserActive,
                 onStrokeFinished = { stroke ->
                     strokeStore.addStroke(date, selectedScope, stroke)
+                    version++
+                },
+                onStrokesErased = { remaining ->
+                    strokeStore.setStrokes(date, selectedScope, remaining)
                     version++
                 },
             )
