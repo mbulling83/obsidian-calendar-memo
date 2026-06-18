@@ -120,3 +120,26 @@ fun insertMeeting(noteContent: String, newEntry: MeetingEntry): MeetingWriteResu
     lines.add(insertionIndex, formatMeetingLine(newEntry))
     return MeetingWriteResult.Updated(lines.joinToString("\n"))
 }
+
+/**
+ * Appends [bulletLines] as the last detail lines under the meeting whose
+ * start time is [startTime], leaving that meeting's existing bullets and
+ * every other meeting untouched (origin AE1). Returns
+ * [MeetingWriteResult.SectionNotFound] if the section or the target
+ * meeting can't be located — no write occurs in that case.
+ */
+fun insertMeetingDetailBullets(noteContent: String, startTime: String, bulletLines: List<String>): MeetingWriteResult {
+    val lines = noteContent.lines().toMutableList()
+    val bounds = findMeetingsSectionBounds(lines) ?: return MeetingWriteResult.SectionNotFound
+    val (headingIndex, sectionEnd) = bounds
+
+    val anchors = (headingIndex + 1 until sectionEnd)
+        .mapNotNull { i -> MEETING_LINE.matchEntire(lines[i])?.let { i to it.groupValues[1] } }
+
+    val targetPos = anchors.indexOfFirst { (_, t) -> t == startTime }
+    if (targetPos == -1) return MeetingWriteResult.SectionNotFound
+
+    val blockEnd = anchors.getOrNull(targetPos + 1)?.first ?: sectionEnd
+    lines.addAll(blockEnd, bulletLines)
+    return MeetingWriteResult.Updated(lines.joinToString("\n"))
+}

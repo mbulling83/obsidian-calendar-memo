@@ -13,18 +13,22 @@ sealed interface NoteWriteResult {
  * unlike meetings there's no chronological insertion point — new notes are
  * appended at the end of the section's existing content.
  */
-fun appendNoteBullet(noteContent: String, text: String): NoteWriteResult {
-    val lines = noteContent.lines().toMutableList()
-    val headingIndex = lines.indexOfFirst { it.trim() == NOTES_HEADING }
+fun appendNoteBullet(noteContent: String, text: String): NoteWriteResult =
+    appendNoteLines(noteContent, listOf("- $text"))
+
+/** Appends already-formatted bullet lines (see [com.boxmemo.app.hwr.formatAsNoteLines]). */
+fun appendNoteLines(noteContent: String, lines: List<String>): NoteWriteResult {
+    val allLines = noteContent.lines().toMutableList()
+    val headingIndex = allLines.indexOfFirst { it.trim() == NOTES_HEADING }
     if (headingIndex == -1) return NoteWriteResult.SectionNotFound
 
-    val sectionEnd = lines
+    val sectionEnd = allLines
         .withIndex()
         .drop(headingIndex + 1)
         .firstOrNull { (_, line) -> line.trim() == "---" || line.trim().startsWith("# ") }
         ?.index
-        ?: lines.size
+        ?: allLines.size
 
-    lines.add(sectionEnd, "- $text")
-    return NoteWriteResult.Updated(lines.joinToString("\n"))
+    allLines.addAll(sectionEnd, lines)
+    return NoteWriteResult.Updated(allLines.joinToString("\n"))
 }

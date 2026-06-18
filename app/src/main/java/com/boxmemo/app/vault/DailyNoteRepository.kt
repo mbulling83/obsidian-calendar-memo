@@ -61,4 +61,23 @@ class DailyNoteRepository(private val vaultSettings: VaultSettings) {
         val result = appendNoteBullet(content, text) as? NoteWriteResult.Updated ?: return false
         return writeNote(date, result.content)
     }
+
+    /**
+     * Writes converted handwriting bullets under the meeting whose start
+     * time is [startTime] (R10/AE1). Returns false without writing
+     * anything if the note can't be read or the meeting can't be found.
+     */
+    fun addMeetingDetailBullets(date: LocalDate, startTime: String, bulletLines: List<String>): Boolean {
+        val content = (readNote(date) as? DailyNoteReadResult.Found)?.content ?: return false
+        val result = insertMeetingDetailBullets(content, startTime, bulletLines) as? MeetingWriteResult.Updated
+            ?: return false
+        return writeNote(date, result.content)
+    }
+
+    /** Writes converted handwriting bullets under the page-level Notes section (R10). */
+    fun addNoteLines(date: LocalDate, lines: List<String>): Boolean {
+        val content = (readNote(date) as? DailyNoteReadResult.Found)?.content ?: return false
+        val result = appendNoteLines(content, lines) as? NoteWriteResult.Updated ?: return false
+        return writeNote(date, result.content)
+    }
 }

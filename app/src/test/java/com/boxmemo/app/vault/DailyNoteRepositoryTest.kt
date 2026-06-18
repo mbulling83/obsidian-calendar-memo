@@ -116,4 +116,35 @@ class DailyNoteRepositoryTest {
         assertTrue(added)
         assertTrue(noteFile.readText().contains("- remember to follow up"))
     }
+
+    @Test
+    fun `addMeetingDetailBullets writes converted bullets under the matching meeting`() {
+        val date = LocalDate.of(2026, 6, 17)
+        val noteFile = tempFolder.newFolder("Periodic Notes", "Daily Notes", "2026", "06 - June")
+            .resolve("2026-06-17.md")
+        noteFile.writeText("# 👥 Meetings\n\n- 09:00 - 09:30: Standup\n---\n# Memos\n")
+
+        val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
+        val added = repo.addMeetingDetailBullets(date, "09:00", listOf("\t- Converted point"))
+
+        assertTrue(added)
+        val entries = (repo.readMeetings(date) as MeetingSectionParseResult.Found).entries
+        assertEquals(listOf("\t- Converted point"), entries.single().detailLines)
+    }
+
+    @Test
+    fun `addNoteLines writes converted bullets under the Notes section`() {
+        val date = LocalDate.of(2026, 6, 17)
+        val noteFile = tempFolder.newFolder("Periodic Notes", "Daily Notes", "2026", "06 - June")
+            .resolve("2026-06-17.md")
+        noteFile.writeText("# 📝 Notes\n---\n# 👥 Meetings\n")
+
+        val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
+        val added = repo.addNoteLines(date, listOf("- Converted point one", "- Converted point two"))
+
+        assertTrue(added)
+        val content = noteFile.readText()
+        assertTrue(content.contains("- Converted point one"))
+        assertTrue(content.contains("- Converted point two"))
+    }
 }
