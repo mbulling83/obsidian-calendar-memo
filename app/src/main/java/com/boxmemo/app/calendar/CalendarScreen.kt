@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import com.boxmemo.app.gcal.GoogleCalendarRepository
+import com.boxmemo.app.quickadd.QuickAddForm
 import com.boxmemo.app.vault.DailyNoteRepository
 import java.time.YearMonth
 
@@ -32,5 +33,10 @@ fun CalendarScreen(
         )
         HorizontalDivider()
         DayEventList(events = uiState.events, meetingsSectionMissing = uiState.meetingsSectionMissing)
+        HorizontalDivider()
+        QuickAddForm(
+            onAddMeeting = { startTime, endTime, title -> viewModel.addMeeting(startTime, endTime, title) },
+            onAddNote = { text -> viewModel.addNote(text) },
+        )
     }
 }

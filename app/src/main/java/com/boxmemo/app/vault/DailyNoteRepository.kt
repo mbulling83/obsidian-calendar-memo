@@ -42,4 +42,23 @@ class DailyNoteRepository(private val vaultSettings: VaultSettings) {
         tempFile.writeText(newContent)
         return tempFile.renameTo(path)
     }
+
+    /**
+     * Adds a new meeting via the quick-add form (R5/R6). Returns false
+     * without writing anything if the note can't be read or has no
+     * `# 👥 Meetings` section — a failed insert must never partially
+     * overwrite the file.
+     */
+    fun addMeeting(date: LocalDate, entry: MeetingEntry): Boolean {
+        val content = (readNote(date) as? DailyNoteReadResult.Found)?.content ?: return false
+        val result = insertMeeting(content, entry) as? MeetingWriteResult.Updated ?: return false
+        return writeNote(date, result.content)
+    }
+
+    /** Adds a new plain note bullet via the quick-add form (R5/R6). */
+    fun addNote(date: LocalDate, text: String): Boolean {
+        val content = (readNote(date) as? DailyNoteReadResult.Found)?.content ?: return false
+        val result = appendNoteBullet(content, text) as? NoteWriteResult.Updated ?: return false
+        return writeNote(date, result.content)
+    }
 }

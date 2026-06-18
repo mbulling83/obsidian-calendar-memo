@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.boxmemo.app.gcal.GoogleCalendarRepository
 import com.boxmemo.app.vault.DailyNoteRepository
+import com.boxmemo.app.vault.MeetingEntry
 import com.boxmemo.app.vault.MeetingSectionParseResult
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,6 +50,25 @@ class DayViewModel(
                 meetingsSectionMissing = meetingsResult == MeetingSectionParseResult.SectionNotFound,
                 isLoading = false,
             )
+        }
+    }
+
+    /** Quick-add a new meeting (R5/R6), then refresh the day view. */
+    fun addMeeting(startTime: String, endTime: String, title: String) {
+        viewModelScope.launch {
+            dailyNoteRepository.addMeeting(
+                uiState.value.date,
+                MeetingEntry(startTime, endTime, title, emptyList()),
+            )
+            selectDate(uiState.value.date)
+        }
+    }
+
+    /** Quick-add a new note bullet (R5/R6), then refresh the day view. */
+    fun addNote(text: String) {
+        viewModelScope.launch {
+            dailyNoteRepository.addNote(uiState.value.date, text)
+            selectDate(uiState.value.date)
         }
     }
 }
