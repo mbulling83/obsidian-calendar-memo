@@ -6,8 +6,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.IconButton
@@ -24,6 +25,8 @@ import java.time.YearMonth
 import java.time.format.TextStyle
 import java.util.Locale
 
+private val ROW_HEIGHT = 36.dp
+
 /**
  * Month grid mirroring the native Boox Calendar+Memo layout: month nav
  * arrows, day cells, today/selected highlighting.
@@ -39,18 +42,18 @@ fun CalendarView(
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onPreviousMonth) {
+            IconButton(onClick = onPreviousMonth, modifier = Modifier.height(ROW_HEIGHT)) {
                 Text("<")
             }
             Text(
-                text = "${yearMonth.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)} ${yearMonth.year}",
-                style = MaterialTheme.typography.titleMedium,
+                text = "${yearMonth.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)} ${yearMonth.year}",
+                style = MaterialTheme.typography.labelLarge,
             )
-            IconButton(onClick = onNextMonth) {
+            IconButton(onClick = onNextMonth, modifier = Modifier.height(ROW_HEIGHT)) {
                 Text(">")
             }
         }
@@ -63,11 +66,11 @@ fun CalendarView(
         val weeks = (totalCells + 6) / 7
 
         for (week in 0 until weeks) {
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(modifier = Modifier.fillMaxWidth().height(ROW_HEIGHT)) {
                 for (dayOfWeek in 0 until 7) {
                     val cellIndex = week * 7 + dayOfWeek
                     val dayNumber = cellIndex - leadingBlanks + 1
-                    Box(modifier = Modifier.weight(1f).aspectRatio(1f).padding(2.dp)) {
+                    Box(modifier = Modifier.weight(1f).fillMaxHeight().padding(1.dp)) {
                         if (dayNumber in 1..daysInMonth) {
                             val date = yearMonth.atDay(dayNumber)
                             DayCell(
@@ -99,6 +102,6 @@ private fun DayCell(day: Int, isToday: Boolean, isSelected: Boolean, onClick: ()
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Text(text = day.toString(), textAlign = TextAlign.Center)
+        Text(text = day.toString(), textAlign = TextAlign.Center, style = MaterialTheme.typography.labelSmall)
     }
 }
