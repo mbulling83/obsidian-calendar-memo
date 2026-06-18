@@ -37,7 +37,7 @@ private fun renderWikiLinks(text: String): AnnotatedString = buildAnnotatedStrin
     for (match in WIKI_LINK.findAll(text)) {
         append(text, cursor, match.range.first)
         pushStyle(SpanStyle(textDecoration = TextDecoration.Underline))
-        append(match.groupValues[1])
+        append(match.groupValues[1].substringAfter('|'))
         pop()
         cursor = match.range.last + 1
     }
@@ -77,7 +77,7 @@ fun MemoSection(
     strokeStore: StrokeStore,
     penSettings: PenSettings,
     modifier: Modifier = Modifier,
-    toolbarContent: @Composable RowScope.(CaptureScope, List<StrokePath>) -> Unit = { _, _ -> },
+    toolbarContent: @Composable RowScope.(CaptureScope, List<StrokePath>, requestClear: () -> Unit) -> Unit = { _, _, _ -> },
 ) {
     var isEraserActive by remember { mutableStateOf(false) }
     var guidelineStyle by remember { mutableStateOf(GuidelineStyle.None) }
@@ -104,7 +104,7 @@ fun MemoSection(
                 CaptureScope.Unscoped -> "Unscoped"
             }
             Text(
-                text = scopeLabel,
+                text = renderWikiLinks(scopeLabel),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f),
@@ -130,7 +130,10 @@ fun MemoSection(
                 },
             )
 
-            toolbarContent(selectedScope, strokes)
+            toolbarContent(selectedScope, strokes) {
+                strokeStore.clear(date, selectedScope)
+                version++
+            }
 
             FilterChip(
                 selected = isEraserActive,
@@ -145,7 +148,7 @@ fun MemoSection(
             AlreadyNotedBlock(selectedMeeting.entry.detailLines)
         }
 
-        key(selectedScope, penSettings, guidelineStyle) {
+        key(date, selectedScope, penSettings) {
             MemoCanvas(
                 strokes = strokeStore.strokesFor(date, selectedScope),
                 penSettings = penSettings,

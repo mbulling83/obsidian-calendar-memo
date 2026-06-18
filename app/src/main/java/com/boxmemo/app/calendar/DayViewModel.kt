@@ -6,6 +6,7 @@ import com.boxmemo.app.gcal.GoogleCalendarRepository
 import com.boxmemo.app.vault.DailyNoteRepository
 import com.boxmemo.app.vault.MeetingEntry
 import com.boxmemo.app.vault.MeetingSectionParseResult
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -39,7 +40,7 @@ class DayViewModel(
 
     fun selectDate(date: LocalDate) {
         _uiState.value = DayUiState(date = date, isLoading = true)
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val meetingsResult = dailyNoteRepository.readMeetings(date)
             val meetings = (meetingsResult as? MeetingSectionParseResult.Found)?.entries.orEmpty()
             val googleEvents = googleCalendarRepository.fetchEvents(date)
@@ -55,7 +56,7 @@ class DayViewModel(
 
     /** Quick-add a new meeting (R5/R6), then refresh the day view. */
     fun addMeeting(startTime: String, endTime: String, title: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             dailyNoteRepository.addMeeting(
                 uiState.value.date,
                 MeetingEntry(startTime, endTime, title, emptyList()),
@@ -66,7 +67,7 @@ class DayViewModel(
 
     /** Quick-add a new note bullet (R5/R6), then refresh the day view. */
     fun addNote(text: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             dailyNoteRepository.addNote(uiState.value.date, text)
             selectDate(uiState.value.date)
         }

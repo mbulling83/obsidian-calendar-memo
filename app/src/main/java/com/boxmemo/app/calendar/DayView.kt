@@ -29,13 +29,16 @@ private val AGENDA_DATE_FORMAT = DateTimeFormatter.ofPattern("EEE d MMM", Locale
 
 private val WIKI_LINK = Regex("""\[\[([^\]]+)]]""")
 
-/** Renders [[Page]] as underlined "Page" with the brackets hidden. */
+/**
+ * Renders [[Page]] as underlined "Page" with the brackets hidden, and
+ * [[Long Name|alias]] as just the underlined "alias".
+ */
 private fun renderWikiLinks(text: String): AnnotatedString = buildAnnotatedString {
     var cursor = 0
     for (match in WIKI_LINK.findAll(text)) {
         append(text, cursor, match.range.first)
         pushStyle(SpanStyle(textDecoration = TextDecoration.Underline))
-        append(match.groupValues[1])
+        append(match.groupValues[1].substringAfter('|'))
         pop()
         cursor = match.range.last + 1
     }

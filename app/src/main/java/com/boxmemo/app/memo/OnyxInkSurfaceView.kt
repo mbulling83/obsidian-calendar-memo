@@ -36,13 +36,35 @@ class OnyxInkSurfaceView(
     context: Context,
     initialStrokes: List<StrokePath>,
     private val penSettings: PenSettings,
-    private val guidelineStyle: GuidelineStyle,
+    private var guidelineStyle: GuidelineStyle,
     private val onStrokeFinished: (StrokePath) -> Unit,
     private val onStrokesErased: (List<StrokePath>) -> Unit,
 ) : SurfaceView(context), SurfaceHolder.Callback {
 
     /** Toggled by MemoCanvas's AndroidView update lambda — no surface recreation. */
     var isEraserActive: Boolean = false
+
+    /**
+     * Resyncs on-screen ink to [strokes] when it differs from what's currently
+     * drawn — driven by MemoCanvas's update lambda so external changes (e.g. a
+     * conversion clearing the scope) actually wipe the ink. A user's own
+     * freshly-finished stroke is already in [currentStrokes] (added in the raw
+     * callback) and in the store, so the lists match and this is a no-op,
+     * avoiding a redundant repaint/flash on every recomposition.
+     */
+    fun syncStrokes(strokes: List<StrokePath>) {
+        if (strokes == currentStrokes) return
+        currentStrokes.clear()
+        currentStrokes.addAll(strokes)
+        repaintClearingRawLayer()
+    }
+
+    /** Changes guidelines without recreating the surface (just a repaint). */
+    fun setGuidelineStyle(style: GuidelineStyle) {
+        if (style == guidelineStyle) return
+        guidelineStyle = style
+        repaintClearingRawLayer()
+    }
 
     private var touchHelper: TouchHelper? = null
     private val currentStrokes = initialStrokes.toMutableList()
@@ -129,6 +151,25 @@ class OnyxInkSurfaceView(
         }
     }
 
+    /**
+     * Repaints the surface from [currentStrokes], clearing the Onyx raw-drawing
+     * layer first. The firmware composites raw ink on its own hardware layer
+     * that a plain [redrawExistingStrokes] (lockCanvas on the normal buffer)
+     * doesn't touch — so erased or converted ink stayed visible even though it
+     * was gone from our data. Toggling raw drawing off reveals our normal
+     * canvas; we repaint there, then re-enable to resume pen capture.
+     */
+    private fun repaintClearingRawLayer() {
+        val helper = touchHelper
+        if (helper == null) {
+            redrawExistingStrokes(holder)
+            return
+        }
+        helper.setRawDrawingEnabled(false)
+        redrawExistingStrokes(holder)
+        helper.setRawDrawingEnabled(true)
+    }
+
     private fun redrawExistingStrokes(holder: SurfaceHolder) {
         val canvas = try {
             holder.lockCanvas()
@@ -140,10 +181,12 @@ class OnyxInkSurfaceView(
             drawGuidelines(canvas)
             for (stroke in currentStrokes) {
                 if (stroke.size < 2) continue
-                val path = android.graphics.Path().apply {
-                    val (startX, startY) = stroke.first()
-                    moveTo(startX, startY)
-                    stroke.drop(1).forEach { (x, y) -> lineTo(x, y) }
+                val path = android.graphics.Path()
+                val (startX, startY) = stroke[0]
+                path.moveTo(startX, startY)
+                for (i in 1 until stroke.size) {
+                    val (x, y) = stroke[i]
+                    path.lineTo(x, y)
                 }
                 canvas.drawPath(path, paint)
             }
@@ -189,7 +232,7 @@ class OnyxInkSurfaceView(
             // erasing — it has no notion of which on-screen pixels are
             // "ours" to remove. We own the redraw so the erased strokes
             // actually disappear from the display, not just our data.
-            redrawExistingStrokes(holder)
+            repaintClearingRawLayer()
             onStrokesErased(remaining)
         }
     }

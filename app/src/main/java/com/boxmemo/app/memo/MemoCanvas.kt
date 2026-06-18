@@ -31,6 +31,10 @@ fun MemoCanvas(
         factory = { context ->
             OnyxInkSurfaceView(context, strokes, penSettings, guidelineStyle, onStrokeFinished, onStrokesErased)
         },
-        update = { view -> view.isEraserActive = isEraserActive },
+        update = { view ->
+            view.isEraserActive = isEraserActive
+            view.setGuidelineStyle(guidelineStyle)
+            view.syncStrokes(strokes)
+        },
     )
 }

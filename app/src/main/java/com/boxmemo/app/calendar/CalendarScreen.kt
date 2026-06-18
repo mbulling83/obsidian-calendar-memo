@@ -82,7 +82,7 @@ fun CalendarScreen(
             meetings = meetings,
             strokeStore = strokeStore,
             penSettings = penSettings,
-            toolbarContent = { scope, strokes ->
+            toolbarContent = { scope, strokes, requestClear ->
                 ConversionActions(
                     date = uiState.date,
                     scope = scope,
@@ -90,7 +90,7 @@ fun CalendarScreen(
                     dailyNoteRepository = dailyNoteRepository,
                     recognitionMethodPreference = recognitionMethodPreference,
                     onConverted = {
-                        strokeStore.clear(uiState.date, scope)
+                        requestClear()
                         viewModel.selectDate(uiState.date)
                     },
                 )
