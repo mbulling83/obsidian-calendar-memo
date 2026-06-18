@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,7 +38,7 @@ private val TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm", Locale.ENGLISH)
  * rather than full-screen panels, so neither takes up standing screen space.
  */
 @Composable
-fun AppTopBar(onSettingsClick: () -> Unit, onAddClick: () -> Unit) {
+fun AppTopBar(onSettingsClick: () -> Unit, onAddClick: () -> Unit, onTodayClick: () -> Unit) {
     var now by remember { mutableStateOf(LocalDateTime.now()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -64,6 +65,9 @@ fun AppTopBar(onSettingsClick: () -> Unit, onAddClick: () -> Unit) {
             )
         }
         Row {
+            IconButton(onClick = onTodayClick) {
+                Icon(Icons.Filled.DateRange, contentDescription = "Jump to today")
+            }
             IconButton(onClick = onSettingsClick) {
                 Icon(Icons.Filled.Settings, contentDescription = "Settings")
             }

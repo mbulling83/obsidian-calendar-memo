@@ -61,6 +61,7 @@ fun CalendarScreen(
                     today = java.time.LocalDate.now(),
                     onPreviousMonth = { viewModel.selectDate(uiState.date.minusMonths(1)) },
                     onNextMonth = { viewModel.selectDate(uiState.date.plusMonths(1)) },
+                    onToday = { viewModel.selectDate(java.time.LocalDate.now()) },
                     onDaySelected = { viewModel.selectDate(it) },
                 )
             }

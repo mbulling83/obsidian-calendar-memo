@@ -64,6 +64,7 @@ class MainActivity : ComponentActivity() {
                                 AppTopBar(
                                     onSettingsClick = { screen = Screen.SETTINGS },
                                     onAddClick = { showAdd = true },
+                                    onTodayClick = { viewModel.selectDate(java.time.LocalDate.now()) },
                                 )
                                 CalendarScreen(
                                     viewModel = viewModel,

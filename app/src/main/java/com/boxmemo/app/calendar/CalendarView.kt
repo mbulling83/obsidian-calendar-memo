@@ -38,6 +38,7 @@ fun CalendarView(
     today: LocalDate,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
+    onToday: () -> Unit,
     onDaySelected: (LocalDate) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -49,9 +50,14 @@ fun CalendarView(
             IconButton(onClick = onPreviousMonth, modifier = Modifier.height(ROW_HEIGHT)) {
                 Text("<")
             }
+            // Month label doubles as a "jump to today" button.
             Text(
                 text = "${yearMonth.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)} ${yearMonth.year}",
                 style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .clickable(onClick = onToday)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             )
             IconButton(onClick = onNextMonth, modifier = Modifier.height(ROW_HEIGHT)) {
                 Text(">")
