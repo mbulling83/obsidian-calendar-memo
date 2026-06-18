@@ -53,6 +53,9 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        jniLibs {
+            pickFirsts += "**/*.so"
+        }
     }
 }
 
@@ -73,6 +76,29 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    // Onyx HWR (MyScript) access for U7 — AIDL binding to the built-in
+    // recognizer, matching jdkruzr/aragonite's confirmed-working approach.
+    implementation("com.onyx.android.sdk:onyxsdk-device:1.3.2") {
+        exclude(group = "com.android.support", module = "support-compat")
+    }
+    implementation("com.onyx.android.sdk:onyxsdk-pen:1.5.1") {
+        exclude(group = "com.android.support", module = "support-compat")
+        exclude(group = "com.android.support", module = "appcompat-v7")
+        exclude(group = "com.onyx.android.sdk", module = "onyxsdk-geometry")
+    }
+    implementation("com.onyx.android.sdk:onyxsdk-base:1.8.3") {
+        exclude(group = "com.android.support", module = "support-compat")
+        exclude(group = "com.android.support", module = "appcompat-v7")
+    }
+    implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1") // required by onyx sdk
+
+    // Jetpack Ink — e-ink-friendly stroke rendering (U6), matching Aragonite.
+    implementation("androidx.ink:ink-nativeloader:1.0.0")
+    implementation("androidx.ink:ink-brush:1.0.0")
+    implementation("androidx.ink:ink-geometry:1.0.0")
+    implementation("androidx.ink:ink-rendering:1.0.0")
+    implementation("androidx.ink:ink-strokes:1.0.0")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
