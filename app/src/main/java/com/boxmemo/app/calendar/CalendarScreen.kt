@@ -13,8 +13,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.boxmemo.app.hwr.RecognitionMethodPreference
 import com.boxmemo.app.memo.ConversionActions
 import com.boxmemo.app.memo.MemoSection
+import com.boxmemo.app.memo.PenSettingsStore
+import com.boxmemo.app.memo.PenSettings
 import com.boxmemo.app.memo.StrokeStore
 import com.boxmemo.app.vault.DailyNoteRepository
 import java.time.YearMonth
@@ -31,8 +34,15 @@ private val CALENDAR_SECTION_HEIGHT = 280.dp
  * below. Settings and quick-add live in modals owned by the caller.
  */
 @Composable
-fun CalendarScreen(viewModel: DayViewModel, dailyNoteRepository: DailyNoteRepository, strokeStore: StrokeStore) {
+fun CalendarScreen(
+    viewModel: DayViewModel,
+    dailyNoteRepository: DailyNoteRepository,
+    strokeStore: StrokeStore,
+    penSettingsStore: PenSettingsStore,
+    recognitionMethodPreference: RecognitionMethodPreference,
+) {
     val uiState by viewModel.uiState.collectAsState()
+    val penSettings by penSettingsStore.settings.collectAsState(initial = PenSettings())
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(modifier = Modifier.fillMaxWidth().height(CALENDAR_SECTION_HEIGHT)) {
@@ -57,12 +67,18 @@ fun CalendarScreen(viewModel: DayViewModel, dailyNoteRepository: DailyNoteReposi
         }
         HorizontalDivider()
         val meetings = uiState.events.filterIsInstance<DayEvent.ObsidianMeeting>()
-        MemoSection(date = uiState.date, meetings = meetings, strokeStore = strokeStore) { scope, strokes, _ ->
+        MemoSection(
+            date = uiState.date,
+            meetings = meetings,
+            strokeStore = strokeStore,
+            penSettings = penSettings,
+        ) { scope, strokes, _ ->
             ConversionActions(
                 date = uiState.date,
                 scope = scope,
                 strokes = strokes,
                 dailyNoteRepository = dailyNoteRepository,
+                recognitionMethodPreference = recognitionMethodPreference,
                 onConverted = {
                     strokeStore.clear(uiState.date, scope)
                     viewModel.selectDate(uiState.date)

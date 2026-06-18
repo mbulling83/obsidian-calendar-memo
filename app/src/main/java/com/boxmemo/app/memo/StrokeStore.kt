@@ -24,4 +24,9 @@ class StrokeStore {
     fun clear(date: LocalDate, scope: CaptureScope) {
         strokesByKey.remove(date to scope)
     }
+
+    /** Replaces the full stroke list for a date+scope (used after erasing removes some strokes). */
+    fun setStrokes(date: LocalDate, scope: CaptureScope, strokes: List<StrokePath>) {
+        strokesByKey[date to scope] = strokes.toMutableList()
+    }
 }

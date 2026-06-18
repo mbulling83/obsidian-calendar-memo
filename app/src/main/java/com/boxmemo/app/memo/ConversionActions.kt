@@ -1,21 +1,25 @@
 package com.boxmemo.app.memo
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.boxmemo.app.BuildConfig
+import com.boxmemo.app.hwr.AiTextResult
 import com.boxmemo.app.hwr.OnyxHWREngine
+import com.boxmemo.app.hwr.RecognitionMethod
+import com.boxmemo.app.hwr.RecognitionMethodPreference
 import com.boxmemo.app.hwr.TextEnhancementClient
 import com.boxmemo.app.hwr.VisionOcrClient
 import com.boxmemo.app.hwr.formatAsMeetingDetailLines
@@ -28,10 +32,9 @@ private const val CAPTURE_WIDTH = 1000
 private const val CAPTURE_HEIGHT = 600
 
 /**
- * Manual per-capture conversion (R8/R9): three buttons rather than one,
- * since [RecognitionMethod.ONYX_THEN_AI_ENHANCE] was added alongside the
- * original Onyx-only / AI-vision-only choice, not as a replacement.
- * Conversion failures never write anything to the note.
+ * Single manual conversion action (R8) using whichever method is
+ * currently set on the Settings page (R9) — diagram conversion is
+ * deprioritized for now per user request, so this only handles text.
  */
 @Composable
 fun ConversionActions(
@@ -39,11 +42,13 @@ fun ConversionActions(
     scope: CaptureScope,
     strokes: List<StrokePath>,
     dailyNoteRepository: DailyNoteRepository,
+    recognitionMethodPreference: RecognitionMethodPreference,
     onConverted: () -> Unit,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     var statusMessage by remember(scope) { mutableStateOf<String?>(null) }
+    val method by recognitionMethodPreference.lastUsedMethod.collectAsState(initial = RecognitionMethod.ONYX_BUILT_IN)
 
     fun writeBack(text: String) {
         val written = when (scope) {
@@ -56,56 +61,49 @@ fun ConversionActions(
         if (written) onConverted()
     }
 
-    Column(modifier = androidx.compose.ui.Modifier.padding(top = 8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(enabled = strokes.isNotEmpty(), onClick = {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Button(
+            enabled = strokes.isNotEmpty(),
+            onClick = {
                 coroutineScope.launch {
-                    statusMessage = "Recognizing (Onyx)..."
-                    val bound = OnyxHWREngine.bindAndAwait(context)
-                    if (!bound) {
-                        statusMessage = "Built-in recognition unavailable on this device. Try AI vision instead."
-                        return@launch
-                    }
-                    val text = OnyxHWREngine.recognizeStrokes(strokes, CAPTURE_WIDTH.toFloat(), CAPTURE_HEIGHT.toFloat())
-                    if (text.isNullOrBlank()) {
-                        statusMessage = "Nothing recognized."
-                    } else {
-                        writeBack(text)
+                    when (method) {
+                        RecognitionMethod.ONYX_BUILT_IN -> {
+                            statusMessage = "Recognizing (Onyx)..."
+                            if (!OnyxHWREngine.bindAndAwait(context)) {
+                                statusMessage = "Built-in recognition unavailable on this device."
+                                return@launch
+                            }
+                            val text = OnyxHWREngine.recognizeStrokes(strokes, CAPTURE_WIDTH.toFloat(), CAPTURE_HEIGHT.toFloat())
+                            if (text.isNullOrBlank()) statusMessage = "Nothing recognized." else writeBack(text)
+                        }
+                        RecognitionMethod.AI_VISION -> {
+                            statusMessage = "Recognizing (AI vision)..."
+                            val bitmap = renderStrokesToBitmap(strokes, CAPTURE_WIDTH, CAPTURE_HEIGHT)
+                            when (val result = VisionOcrClient(BuildConfig.OPENROUTER_API_KEY).recognizeText(bitmap)) {
+                                is AiTextResult.Success -> writeBack(result.text)
+                                is AiTextResult.Failure -> statusMessage = result.reason
+                            }
+                        }
+                        RecognitionMethod.ONYX_THEN_AI_ENHANCE -> {
+                            statusMessage = "Recognizing (Onyx + AI enhance)..."
+                            if (!OnyxHWREngine.bindAndAwait(context)) {
+                                statusMessage = "Built-in recognition unavailable on this device."
+                                return@launch
+                            }
+                            val rawText = OnyxHWREngine.recognizeStrokes(strokes, CAPTURE_WIDTH.toFloat(), CAPTURE_HEIGHT.toFloat())
+                            if (rawText.isNullOrBlank()) {
+                                statusMessage = "Nothing recognized."
+                                return@launch
+                            }
+                            when (val result = TextEnhancementClient(BuildConfig.OPENROUTER_API_KEY).enhance(rawText)) {
+                                is AiTextResult.Success -> writeBack(result.text)
+                                is AiTextResult.Failure -> statusMessage = result.reason
+                            }
+                        }
                     }
                 }
-            }) { Text("Onyx") }
-
-            Button(enabled = strokes.isNotEmpty(), onClick = {
-                coroutineScope.launch {
-                    statusMessage = "Recognizing (AI vision)..."
-                    val bitmap = renderStrokesToBitmap(strokes, CAPTURE_WIDTH, CAPTURE_HEIGHT)
-                    when (val result = VisionOcrClient(BuildConfig.OPENROUTER_API_KEY).recognizeText(bitmap)) {
-                        is com.boxmemo.app.hwr.AiTextResult.Success -> writeBack(result.text)
-                        is com.boxmemo.app.hwr.AiTextResult.Failure -> statusMessage = result.reason
-                    }
-                }
-            }) { Text("AI vision") }
-
-            Button(enabled = strokes.isNotEmpty(), onClick = {
-                coroutineScope.launch {
-                    statusMessage = "Recognizing (Onyx + AI enhance)..."
-                    val bound = OnyxHWREngine.bindAndAwait(context)
-                    if (!bound) {
-                        statusMessage = "Built-in recognition unavailable on this device."
-                        return@launch
-                    }
-                    val rawText = OnyxHWREngine.recognizeStrokes(strokes, CAPTURE_WIDTH.toFloat(), CAPTURE_HEIGHT.toFloat())
-                    if (rawText.isNullOrBlank()) {
-                        statusMessage = "Nothing recognized."
-                        return@launch
-                    }
-                    when (val result = TextEnhancementClient(BuildConfig.OPENROUTER_API_KEY).enhance(rawText)) {
-                        is com.boxmemo.app.hwr.AiTextResult.Success -> writeBack(result.text)
-                        is com.boxmemo.app.hwr.AiTextResult.Failure -> statusMessage = result.reason
-                    }
-                }
-            }) { Text("Onyx + AI enhance") }
-        }
+            },
+        ) { Text("Convert") }
 
         statusMessage?.let { Text(it) }
     }

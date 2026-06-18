@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,6 +17,8 @@ import androidx.compose.ui.Modifier
 import com.boxmemo.app.calendar.CalendarScreen
 import com.boxmemo.app.calendar.DayViewModel
 import com.boxmemo.app.gcal.NoOpGoogleCalendarRepository
+import com.boxmemo.app.hwr.RecognitionMethodPreference
+import com.boxmemo.app.memo.PenSettingsStore
 import com.boxmemo.app.memo.StrokeStore
 import com.boxmemo.app.quickadd.QuickAddForm
 import com.boxmemo.app.settings.SettingsScreen
@@ -29,11 +30,15 @@ import com.boxmemo.app.ui.BoxMemoTypography
 import com.boxmemo.app.vault.DailyNoteRepository
 import com.boxmemo.app.vault.VaultSettings
 
+private enum class Screen { CALENDAR, SETTINGS }
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val store = VaultSettingsStore(applicationContext)
+        val penSettingsStore = PenSettingsStore(applicationContext)
+        val recognitionMethodPreference = RecognitionMethodPreference(applicationContext)
 
         setContent {
             MaterialTheme(typography = BoxMemoTypography) {
@@ -50,37 +55,35 @@ class MainActivity : ComponentActivity() {
                     }
                     val strokeStore = remember { StrokeStore() }
 
-                    var showSettings by remember { mutableStateOf(false) }
+                    var screen by remember { mutableStateOf(Screen.CALENDAR) }
                     var showAdd by remember { mutableStateOf(false) }
 
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        AppTopBar(
-                            onSettingsClick = { showSettings = true },
-                            onAddClick = { showAdd = true },
-                        )
-                        CalendarScreen(
-                            viewModel = viewModel,
-                            dailyNoteRepository = dailyNoteRepository,
-                            strokeStore = strokeStore,
-                        )
-                    }
-
-                    if (showSettings) {
-                        AlertDialog(
-                            onDismissRequest = { showSettings = false },
-                            confirmButton = {
-                                TextButton(onClick = { showSettings = false }) {
-                                    androidx.compose.material3.Text("Done")
-                                }
-                            },
-                            text = {
-                                SettingsScreen(
-                                    store = store,
-                                    onRequestAllFilesAccess = { launchAllFilesAccessSettings(this@MainActivity) },
-                                    hasAllFilesAccess = { VaultPermission.hasAllFilesAccess() },
+                    when (screen) {
+                        Screen.CALENDAR -> {
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                AppTopBar(
+                                    onSettingsClick = { screen = Screen.SETTINGS },
+                                    onAddClick = { showAdd = true },
                                 )
-                            },
-                        )
+                                CalendarScreen(
+                                    viewModel = viewModel,
+                                    dailyNoteRepository = dailyNoteRepository,
+                                    strokeStore = strokeStore,
+                                    penSettingsStore = penSettingsStore,
+                                    recognitionMethodPreference = recognitionMethodPreference,
+                                )
+                            }
+                        }
+                        Screen.SETTINGS -> {
+                            SettingsScreen(
+                                store = store,
+                                penSettingsStore = penSettingsStore,
+                                recognitionMethodPreference = recognitionMethodPreference,
+                                onBack = { screen = Screen.CALENDAR },
+                                onRequestAllFilesAccess = { launchAllFilesAccessSettings(this@MainActivity) },
+                                hasAllFilesAccess = { VaultPermission.hasAllFilesAccess() },
+                            )
+                        }
                     }
 
                     if (showAdd) {
