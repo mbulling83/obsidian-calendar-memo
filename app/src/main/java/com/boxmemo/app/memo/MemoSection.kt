@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.FilterChip
@@ -75,6 +76,7 @@ fun MemoSection(
     meetings: List<DayEvent.ObsidianMeeting>,
     strokeStore: StrokeStore,
     penSettings: PenSettings,
+    modifier: Modifier = Modifier,
     toolbarContent: @Composable RowScope.(CaptureScope, List<StrokePath>) -> Unit = { _, _ -> },
 ) {
     var isEraserActive by remember { mutableStateOf(false) }
@@ -87,7 +89,7 @@ fun MemoSection(
     version
     val strokes = strokeStore.strokesFor(date, selectedScope)
 
-    Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
+    Column(modifier = modifier.fillMaxWidth().fillMaxHeight().padding(8.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp),

@@ -76,6 +76,7 @@ fun CalendarScreen(
         }
         HorizontalDivider(thickness = 2.dp)
         MemoSection(
+            modifier = Modifier.weight(1f),
             date = uiState.date,
             selectedScope = selectedScope,
             meetings = meetings,

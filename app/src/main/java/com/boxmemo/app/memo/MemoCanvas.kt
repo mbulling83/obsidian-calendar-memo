@@ -1,10 +1,9 @@
 package com.boxmemo.app.memo
 
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 
 /**
@@ -28,7 +27,7 @@ fun MemoCanvas(
     onStrokesErased: (List<StrokePath>) -> Unit,
 ) {
     AndroidView(
-        modifier = Modifier.fillMaxWidth().height(320.dp),
+        modifier = Modifier.fillMaxWidth().fillMaxHeight(),
         factory = { context ->
             OnyxInkSurfaceView(context, strokes, penSettings, guidelineStyle, onStrokeFinished, onStrokesErased)
         },
