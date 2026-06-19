@@ -34,8 +34,9 @@ Target device: Boox U7 (and compatible Onyx Boox hardware running Android 10+, m
 | Package | Responsibility |
 |---|---|
 | `calendar/` | Month grid + day view UI (`CalendarScreen`, `CalendarView`, `DayView`); `DayViewModel` owns merged Obsidian+GCal state |
-| `vault/` | All file I/O: `DailyNoteRepository` (single read/write owner), `VaultSettings` (path resolution), `MeetingSectionParser`, `NotesSectionParser` |
-| `memo/` | Handwriting surface: `OnyxInkSurfaceView` (raw pen input), `MemoCanvas` (Compose wrapper), `StrokeStore`, `ConversionActions` (triggers recognition and writes back) |
+| `vault/` | All file I/O: `DailyNoteRepository` (single read/write owner for the daily note), `VaultFileRepository` + `insertLines` (read/line-splice/write for arbitrary vault files), `VaultFileIndex` (folder tree + filename search), `VaultSettings` (path resolution), `MeetingSectionParser`, `NotesSectionParser` |
+| `memo/` | Handwriting surface: `OnyxInkSurfaceView` (raw pen input), `MemoCanvas` (Compose wrapper), `StrokeStore`, `ConversionActions` (triggers recognition and writes back), `recognizeStrokes` (shared Onyx/ML Kit recognition helper), `renderInlineMarkdown` |
+| `vaultnotes/` | `VaultNotesScreen`: pick any `.md` file (tree or filename search), then handwrite and convert bullets spliced into the file at a tapped line. Reuses `MemoCanvas` + `recognizeStrokes`; writes via `VaultFileRepository` |
 | `hwr/` | Recognition: `OnyxHWREngine` (AIDL to firmware MyScript service), `BulletFormatter` |
 | `gcal/` | `GoogleCalendarRepository` interface + `NoOpGoogleCalendarRepository` (GCal OAuth deferred) |
 | `quickadd/` | Quick-add form composables for adding meetings/notes via text |
@@ -48,7 +49,7 @@ Target device: Boox U7 (and compatible Onyx Boox hardware running Android 10+, m
 
 **Write-then-replace**: `DailyNoteRepository.writeNote()` writes to a `.tmp` sibling file then atomically renames over the original. This ensures LiveSync (running concurrently on-device) never observes a partial write.
 
-**`DailyNoteRepository` is the single owner of file I/O** — the calendar view, conversion engines, and quick-add form all go through it. Nothing in `memo/`, `hwr/`, or `calendar/` touches the filesystem directly.
+**`DailyNoteRepository` is the single owner of daily-note file I/O** — the calendar view, conversion engines, and quick-add form all go through it. The Vault Notes screen uses `VaultFileRepository` for arbitrary files (same write-then-replace discipline). Nothing in `memo/`, `hwr/`, `calendar/`, or `vaultnotes/` touches the filesystem directly — it routes through a repository in `vault/`.
 
 **Onyx HWR binding** (`OnyxHWREngine`) binds to the undocumented firmware AIDL service `com.onyx.android.ksync / KHwrService`. The AIDL stubs live under `com/onyx/android/sdk/hwr/service/`. The wire format is a hand-rolled protobuf (adapted from aragonite). Pressure defaults to 0.5 and timestamps are synthesized at 10ms intervals — adequate for recognition, not for replay.
 

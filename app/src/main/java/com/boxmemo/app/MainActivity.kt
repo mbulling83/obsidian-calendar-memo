@@ -30,11 +30,15 @@ import com.boxmemo.app.settings.VaultSettingsStore
 import com.boxmemo.app.settings.launchAllFilesAccessSettings
 import com.boxmemo.app.ui.AppTopBar
 import com.boxmemo.app.ui.BoxMemoTypography
+import com.boxmemo.app.memo.PenSettings
 import com.boxmemo.app.vault.DailyNoteRepository
+import com.boxmemo.app.vault.VaultFileIndex
+import com.boxmemo.app.vault.VaultFileRepository
 import com.boxmemo.app.vault.VaultSettings
+import com.boxmemo.app.vaultnotes.VaultNotesScreen
 import com.boxmemo.app.widget.AgendaWidgetProvider
 
-private enum class Screen { CALENDAR, SETTINGS }
+private enum class Screen { CALENDAR, SETTINGS, VAULT_NOTES }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -57,7 +61,10 @@ class MainActivity : ComponentActivity() {
                     val viewModel = remember(dailyNoteRepository) {
                         DayViewModel(dailyNoteRepository, NoOpGoogleCalendarRepository)
                     }
+                    val vaultFileRepository = remember { VaultFileRepository() }
+                    val vaultFileIndex = remember(vaultRoot) { VaultFileIndex(vaultRoot) }
                     val strokeStore = remember { StrokeStore() }
+                    val penSettings by penSettingsStore.settings.collectAsState(initial = PenSettings())
 
                     var screen by remember { mutableStateOf(Screen.CALENDAR) }
                     var showAdd by remember { mutableStateOf(false) }
@@ -80,6 +87,7 @@ class MainActivity : ComponentActivity() {
                                     onSettingsClick = { screen = Screen.SETTINGS },
                                     onAddClick = { showAdd = true },
                                     onTodayClick = { viewModel.selectDate(java.time.LocalDate.now()) },
+                                    onVaultNotesClick = { screen = Screen.VAULT_NOTES },
                                 )
                                 CalendarScreen(
                                     viewModel = viewModel,
@@ -97,6 +105,15 @@ class MainActivity : ComponentActivity() {
                                 onBack = { screen = Screen.CALENDAR },
                                 onRequestAllFilesAccess = { launchAllFilesAccessSettings(this@MainActivity) },
                                 hasAllFilesAccess = { VaultPermission.hasAllFilesAccess() },
+                            )
+                        }
+                        Screen.VAULT_NOTES -> {
+                            VaultNotesScreen(
+                                fileIndex = vaultFileIndex,
+                                fileRepository = vaultFileRepository,
+                                strokeStore = strokeStore,
+                                penSettings = penSettings,
+                                onBack = { screen = Screen.CALENDAR },
                             )
                         }
                     }

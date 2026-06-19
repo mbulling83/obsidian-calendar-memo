@@ -15,8 +15,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import com.boxmemo.app.hwr.HwrEngineType
-import com.boxmemo.app.hwr.MlKitHWREngine
-import com.boxmemo.app.hwr.OnyxHWREngine
 import com.boxmemo.app.hwr.formatAsMeetingDetailLines
 import com.boxmemo.app.hwr.formatAsNoteLines
 import com.boxmemo.app.settings.HwrSettingsStore
@@ -26,26 +24,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
-import kotlin.math.ceil
-
-private const val CAPTURE_MARGIN = 40
-private const val MIN_CAPTURE_WIDTH = 400
-private const val MIN_CAPTURE_HEIGHT = 200
-
-/**
- * Sizes the OCR/HWR capture to contain all ink. The canvas fills the
- * remaining screen — wider/taller than the old hardcoded 1000×600 on a U7 —
- * so a fixed size silently clipped strokes written low or to the right, both
- * in the rendered bitmap and the HWR viewport, dropping that ink from
- * recognition. Deriving from the strokes' extent guarantees nothing is lost.
- */
-private fun captureSizeFor(strokes: List<StrokePath>): Pair<Int, Int> {
-    val points = strokes.flatten()
-    if (points.isEmpty()) return MIN_CAPTURE_WIDTH to MIN_CAPTURE_HEIGHT
-    val width = maxOf(MIN_CAPTURE_WIDTH, ceil(points.maxOf { it.first }).toInt() + CAPTURE_MARGIN)
-    val height = maxOf(MIN_CAPTURE_HEIGHT, ceil(points.maxOf { it.second }).toInt() + CAPTURE_MARGIN)
-    return width to height
-}
 
 /**
  * Single manual conversion action (R8) using the Onyx built-in MyScript
@@ -115,26 +93,13 @@ fun ConversionActions(
                     statusMessage = "Nothing to convert."
                     return@launch
                 }
-                val (captureWidth, captureHeight) = captureSizeFor(strokes)
                 statusMessage = "Recognizing (${engine.label})…"
-                val text = when (engine) {
-                    HwrEngineType.ONYX -> {
-                        if (!OnyxHWREngine.bindAndAwait(context)) {
-                            statusMessage = "Onyx HWR unavailable."
-                            return@launch
-                        }
-                        OnyxHWREngine.recognizeStrokes(strokes, captureWidth.toFloat(), captureHeight.toFloat())
-                    }
-                    HwrEngineType.ML_KIT -> {
-                        if (!MlKitHWREngine.ensureReady()) {
-                            statusMessage =
-                                "ML Kit unavailable — its language model needs a one-time download (connect to a network, or use the Download button in Settings)."
-                            return@launch
-                        }
-                        MlKitHWREngine.recognizeStrokes(strokes, captureWidth.toFloat(), captureHeight.toFloat())
-                    }
+                when (val outcome = recognizeStrokes(context, engine, strokes)) {
+                    is RecognitionOutcome.Unavailable -> statusMessage = outcome.message
+                    is RecognitionOutcome.Recognized ->
+                        if (outcome.value.isNullOrBlank()) statusMessage = "Nothing recognized."
+                        else writeBack(outcome.value)
                 }
-                if (text.isNullOrBlank()) statusMessage = "Nothing recognized." else writeBack(text)
             }
         },
         label = { Text("Convert") },

@@ -13,6 +13,10 @@ typealias StrokePath = List<Pair<Float, Float>>
  */
 class StrokeStore {
     private val strokesByKey = mutableMapOf<Pair<LocalDate, CaptureScope>, MutableList<StrokePath>>()
+    // Parallel map for callers that key by an arbitrary string (the Vault Notes
+    // screen keys by file path), kept separate so its keys never collide with
+    // the calendar's (date, scope) keys.
+    private val strokesByStringKey = mutableMapOf<String, MutableList<StrokePath>>()
 
     fun strokesFor(date: LocalDate, scope: CaptureScope): List<StrokePath> =
         strokesByKey[date to scope].orEmpty()
@@ -28,5 +32,19 @@ class StrokeStore {
     /** Replaces the full stroke list for a date+scope (used after erasing removes some strokes). */
     fun setStrokes(date: LocalDate, scope: CaptureScope, strokes: List<StrokePath>) {
         strokesByKey[date to scope] = strokes.toMutableList()
+    }
+
+    fun strokesFor(key: String): List<StrokePath> = strokesByStringKey[key].orEmpty()
+
+    fun addStroke(key: String, stroke: StrokePath) {
+        strokesByStringKey.getOrPut(key) { mutableListOf() }.add(stroke)
+    }
+
+    fun clear(key: String) {
+        strokesByStringKey.remove(key)
+    }
+
+    fun setStrokes(key: String, strokes: List<StrokePath>) {
+        strokesByStringKey[key] = strokes.toMutableList()
     }
 }
