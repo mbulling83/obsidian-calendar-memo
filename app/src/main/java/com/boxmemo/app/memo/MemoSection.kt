@@ -2,6 +2,7 @@ package com.boxmemo.app.memo
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -147,6 +148,12 @@ private const val DEFAULT_NOTED_HEIGHT_DP = 320f
 private const val MIN_NOTED_HEIGHT_DP = 64f
 private const val MAX_NOTED_HEIGHT_DP = 800f
 
+// Side-by-side "Already noted" column width (dp): mirrors the stacked layout's
+// resize treatment, dragged via the vertical divider between notes and canvas.
+private const val DEFAULT_NOTED_WIDTH_DP = 320f
+private const val MIN_NOTED_WIDTH_DP = 120f
+private const val MAX_NOTED_WIDTH_DP = 800f
+
 /**
  * Handwriting canvas for the currently selected scope (a meeting or Notes).
  * Scope selection is driven externally via the agenda panel. The toolbar row
@@ -200,6 +207,9 @@ fun MemoSection(
     // by dragging the handle at its bottom edge with the stylus. Persisted as a
     // UI preference across meetings/days.
     var notedHeightDp by rememberSaveable { mutableFloatStateOf(DEFAULT_NOTED_HEIGHT_DP) }
+    // Side-by-side counterpart: width of the "Already noted" column when the
+    // Split layout is active. Resized by dragging the vertical divider.
+    var notedWidthDp by rememberSaveable { mutableFloatStateOf(DEFAULT_NOTED_WIDTH_DP) }
     val density = LocalDensity.current
 
     Column(modifier = modifier.fillMaxWidth().fillMaxHeight().padding(8.dp)) {
@@ -339,25 +349,36 @@ fun MemoSection(
         }
 
         if (hasDetailLines && columnSplit) {
-            // Side-by-side: notes take the left half, canvas the right half.
-            // When collapsed, the notes column shrinks to its header so the
-            // canvas reclaims the freed width.
+            // Side-by-side: the notes column occupies a fixed, stylus-resizable
+            // width and the canvas fills the rest. When collapsed, the notes
+            // column shrinks to its header (and the divider hides) so the canvas
+            // reclaims the freed width.
             Row(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                val notesModifier = if (notesExpanded) {
-                    Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .verticalScroll(rememberScrollState())
-                        .padding(end = 8.dp)
+                if (notesExpanded) {
+                    AlreadyNotedBlock(
+                        detailLines = detailLines,
+                        expanded = true,
+                        onToggleExpanded = { notesExpanded = !notesExpanded },
+                        modifier = Modifier
+                            .width(notedWidthDp.dp)
+                            .fillMaxHeight()
+                            .verticalScroll(rememberScrollState()),
+                    )
+                    NotedResizeHandleHorizontal(
+                        onDrag = { dragPx ->
+                            val deltaDp = with(density) { dragPx.toDp().value }
+                            notedWidthDp = (notedWidthDp + deltaDp)
+                                .coerceIn(MIN_NOTED_WIDTH_DP, MAX_NOTED_WIDTH_DP)
+                        },
+                    )
                 } else {
-                    Modifier.padding(end = 8.dp)
+                    AlreadyNotedBlock(
+                        detailLines = detailLines,
+                        expanded = false,
+                        onToggleExpanded = { notesExpanded = !notesExpanded },
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
                 }
-                AlreadyNotedBlock(
-                    detailLines = detailLines,
-                    expanded = notesExpanded,
-                    onToggleExpanded = { notesExpanded = !notesExpanded },
-                    modifier = notesModifier,
-                )
                 canvas(Modifier.weight(1f).fillMaxHeight())
             }
         } else {
@@ -469,6 +490,43 @@ private fun NotedResizeHandle(
             modifier = Modifier
                 .width(48.dp)
                 .height(4.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.outline,
+                    shape = RoundedCornerShape(2.dp),
+                ),
+        )
+    }
+}
+
+/**
+ * The vertical counterpart of [NotedResizeHandle], sitting between the
+ * side-by-side "Already noted" column and the writing canvas. Dragging it right
+ * with the stylus grows the notes column (and shrinks the canvas); dragging left
+ * does the reverse. [onDrag] receives the horizontal drag delta in pixels
+ * (positive = rightward).
+ */
+@Composable
+private fun NotedResizeHandleHorizontal(
+    onDrag: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .width(24.dp)
+            .pointerInput(Unit) {
+                detectHorizontalDragGestures { change, dragAmount ->
+                    change.consume()
+                    onDrag(dragAmount)
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        // Grab bar, sized to read as a draggable affordance on e-ink.
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .height(48.dp)
                 .background(
                     color = MaterialTheme.colorScheme.outline,
                     shape = RoundedCornerShape(2.dp),
