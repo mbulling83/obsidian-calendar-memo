@@ -13,12 +13,13 @@
         android:id="@+id/item_time"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:minWidth="56dp"
+        android:minWidth="118dp"
+        android:maxLines="1"
         android:textColor="#000000"
         android:textSize="16sp"
         android:textStyle="bold"
         android:fontFamily="monospace"
-        tools:text="09:00" />
+        tools:text="09:00 - 10:00" />
 
     <TextView
         android:id="@+id/item_title"

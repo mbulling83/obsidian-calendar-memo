@@ -57,7 +57,7 @@ private class AgendaRemoteViewsFactory(
     override fun getViewAt(position: Int): RemoteViews {
         val entry = meetings[position]
         return RemoteViews(context.packageName, R.layout.widget_agenda_item).apply {
-            setTextViewText(R.id.item_time, entry.startTime)
+            setTextViewText(R.id.item_time, "${entry.startTime} - ${entry.endTime}")
             setTextViewText(R.id.item_title, entry.title)
             // Every row opens the app via the template set on the collection.
             setOnClickFillInIntent(R.id.item_root, Intent())
