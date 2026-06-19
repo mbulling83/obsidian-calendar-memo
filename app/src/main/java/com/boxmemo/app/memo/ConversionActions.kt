@@ -14,15 +14,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import com.boxmemo.app.BuildConfig
-import com.boxmemo.app.hwr.AiTextResult
+import com.boxmemo.app.hwr.HwrEngineType
+import com.boxmemo.app.hwr.MlKitHWREngine
 import com.boxmemo.app.hwr.OnyxHWREngine
-import com.boxmemo.app.hwr.RecognitionMethod
-import com.boxmemo.app.hwr.RecognitionMethodPreference
-import com.boxmemo.app.hwr.TextEnhancementClient
-import com.boxmemo.app.hwr.VisionOcrClient
 import com.boxmemo.app.hwr.formatAsMeetingDetailLines
 import com.boxmemo.app.hwr.formatAsNoteLines
+import com.boxmemo.app.settings.HwrSettingsStore
 import com.boxmemo.app.vault.DailyNoteRepository
 import com.boxmemo.app.vault.NoteWriteOutcome
 import kotlinx.coroutines.Dispatchers
@@ -51,9 +48,8 @@ private fun captureSizeFor(strokes: List<StrokePath>): Pair<Int, Int> {
 }
 
 /**
- * Single manual conversion action (R8) using whichever method is
- * currently set on the Settings page (R9) — diagram conversion is
- * deprioritized for now per user request, so this only handles text.
+ * Single manual conversion action (R8) using the Onyx built-in MyScript
+ * recognizer to turn handwriting into Markdown bullets.
  */
 @Composable
 fun ConversionActions(
@@ -62,13 +58,13 @@ fun ConversionActions(
     strokes: List<StrokePath>,
     flushStrokes: () -> List<StrokePath>,
     dailyNoteRepository: DailyNoteRepository,
-    recognitionMethodPreference: RecognitionMethodPreference,
     onConverted: () -> Unit,
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
+    val hwrSettingsStore = remember { HwrSettingsStore(context) }
+    val engine by hwrSettingsStore.engine.collectAsState(initial = HwrEngineType.ONYX)
     var statusMessage by remember(scope) { mutableStateOf<String?>(null) }
-    val method by recognitionMethodPreference.lastUsedMethod.collectAsState(initial = RecognitionMethod.ONYX_BUILT_IN)
 
     suspend fun writeBack(text: String) {
         val outcome = withContext(Dispatchers.IO) {
@@ -86,7 +82,7 @@ fun ConversionActions(
             }
         }
         statusMessage = when (outcome) {
-            NoteWriteOutcome.Written -> "Converted and saved."
+            NoteWriteOutcome.Written -> "Converted and saved (${engine.label})."
             NoteWriteOutcome.AmbiguousMeeting ->
                 "Converted, but more than one meeting matches this time and title — rename one so they're distinct, then convert again."
             NoteWriteOutcome.MeetingNotFound ->
@@ -120,41 +116,25 @@ fun ConversionActions(
                     return@launch
                 }
                 val (captureWidth, captureHeight) = captureSizeFor(strokes)
-                when (method) {
-                    RecognitionMethod.ONYX_BUILT_IN -> {
-                        statusMessage = "Recognizing…"
+                statusMessage = "Recognizing (${engine.label})…"
+                val text = when (engine) {
+                    HwrEngineType.ONYX -> {
                         if (!OnyxHWREngine.bindAndAwait(context)) {
                             statusMessage = "Onyx HWR unavailable."
                             return@launch
                         }
-                        val text = OnyxHWREngine.recognizeStrokes(strokes, captureWidth.toFloat(), captureHeight.toFloat())
-                        if (text.isNullOrBlank()) statusMessage = "Nothing recognized." else writeBack(text)
+                        OnyxHWREngine.recognizeStrokes(strokes, captureWidth.toFloat(), captureHeight.toFloat())
                     }
-                    RecognitionMethod.AI_VISION -> {
-                        statusMessage = "Recognizing…"
-                        val bitmap = withContext(Dispatchers.IO) { renderStrokesToBitmap(strokes, captureWidth, captureHeight) }
-                        when (val result = VisionOcrClient(BuildConfig.OPENROUTER_API_KEY).recognizeText(bitmap)) {
-                            is AiTextResult.Success -> writeBack(result.text)
-                            is AiTextResult.Failure -> statusMessage = result.reason
-                        }
-                    }
-                    RecognitionMethod.ONYX_THEN_AI_ENHANCE -> {
-                        statusMessage = "Recognizing…"
-                        if (!OnyxHWREngine.bindAndAwait(context)) {
-                            statusMessage = "Onyx HWR unavailable."
+                    HwrEngineType.ML_KIT -> {
+                        if (!MlKitHWREngine.ensureReady()) {
+                            statusMessage =
+                                "ML Kit unavailable — its language model needs a one-time download (connect to a network, or use the Download button in Settings)."
                             return@launch
                         }
-                        val rawText = OnyxHWREngine.recognizeStrokes(strokes, captureWidth.toFloat(), captureHeight.toFloat())
-                        if (rawText.isNullOrBlank()) {
-                            statusMessage = "Nothing recognized."
-                            return@launch
-                        }
-                        when (val result = TextEnhancementClient(BuildConfig.OPENROUTER_API_KEY).enhance(rawText)) {
-                            is AiTextResult.Success -> writeBack(result.text)
-                            is AiTextResult.Failure -> statusMessage = result.reason
-                        }
+                        MlKitHWREngine.recognizeStrokes(strokes, captureWidth.toFloat(), captureHeight.toFloat())
                     }
                 }
+                if (text.isNullOrBlank()) statusMessage = "Nothing recognized." else writeBack(text)
             }
         },
         label = { Text("Convert") },

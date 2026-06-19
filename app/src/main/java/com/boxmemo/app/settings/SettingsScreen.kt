@@ -33,28 +33,25 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.boxmemo.app.hwr.RecognitionMethod
-import com.boxmemo.app.hwr.RecognitionMethodPreference
+import com.boxmemo.app.hwr.HwrEngineType
+import com.boxmemo.app.hwr.MlKitHWREngine
 import com.boxmemo.app.memo.PenSettingsStore
 import com.boxmemo.app.memo.PenType
 import kotlinx.coroutines.launch
 
 /**
  * Full settings page (not a modal — settings here are infrequent but
- * deserve room to breathe): vault root path, pen type/thickness, and
- * which recognition method conversion uses by default.
+ * deserve room to breathe): vault root path and pen type/thickness.
  */
 @Composable
 fun SettingsScreen(
     store: VaultSettingsStore,
     penSettingsStore: PenSettingsStore,
-    recognitionMethodPreference: RecognitionMethodPreference,
+    hwrSettingsStore: HwrSettingsStore,
     onBack: () -> Unit,
     onRequestAllFilesAccess: () -> Unit,
     hasAllFilesAccess: () -> Boolean,
 ) {
-    val scope = rememberCoroutineScope()
-
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
             IconButton(onClick = onBack) {
@@ -75,7 +72,54 @@ fun SettingsScreen(
             HorizontalDivider()
             PenSection(penSettingsStore)
             HorizontalDivider()
-            RecognitionMethodSection(recognitionMethodPreference, scope)
+            HwrSection(hwrSettingsStore)
+        }
+    }
+}
+
+@Composable
+private fun HwrSection(hwrSettingsStore: HwrSettingsStore) {
+    val engine by hwrSettingsStore.engine.collectAsState(initial = HwrEngineType.ONYX)
+    val scope = rememberCoroutineScope()
+    var modelStatus by remember { mutableStateOf<String?>(null) }
+    var checkingModel by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Handwriting recognition", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Engine used by Convert. Switch to compare quality on the same handwriting.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HwrEngineType.entries.forEach { type ->
+                FilterChip(
+                    selected = engine == type,
+                    onClick = { scope.launch { hwrSettingsStore.setEngine(type) } },
+                    label = { Text(type.label) },
+                )
+            }
+        }
+        if (engine == HwrEngineType.ML_KIT) {
+            Text(
+                "ML Kit downloads a ~20 MB English model once (needs network), then works offline.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            OutlinedButton(
+                enabled = !checkingModel,
+                onClick = {
+                    scope.launch {
+                        checkingModel = true
+                        modelStatus = "Downloading model…"
+                        modelStatus = if (MlKitHWREngine.ensureReady()) {
+                            "Model ready — ML Kit will work offline."
+                        } else {
+                            "Couldn't prepare the model — check your network connection and try again."
+                        }
+                        checkingModel = false
+                    }
+                },
+            ) { Text("Download / verify ML Kit model") }
+            modelStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         }
     }
 }
@@ -140,32 +184,6 @@ private fun PenSection(penSettingsStore: PenSettingsStore) {
             valueRange = 1f..16f,
         )
     }
-}
-
-@Composable
-private fun RecognitionMethodSection(preference: RecognitionMethodPreference, scope: kotlinx.coroutines.CoroutineScope) {
-    val lastUsedMethod by preference.lastUsedMethod.collectAsState(initial = RecognitionMethod.ONYX_BUILT_IN)
-
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Handwriting conversion method", style = MaterialTheme.typography.titleMedium)
-        Column {
-            RecognitionMethod.entries.forEach { method ->
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    androidx.compose.material3.RadioButton(
-                        selected = lastUsedMethod == method,
-                        onClick = { scope.launch { preference.setLastUsedMethod(method) } },
-                    )
-                    Text(methodLabel(method))
-                }
-            }
-        }
-    }
-}
-
-private fun methodLabel(method: RecognitionMethod): String = when (method) {
-    RecognitionMethod.ONYX_BUILT_IN -> "Onyx built-in"
-    RecognitionMethod.AI_VISION -> "AI vision (OpenRouter)"
-    RecognitionMethod.ONYX_THEN_AI_ENHANCE -> "Onyx + AI enhance"
 }
 
 fun launchAllFilesAccessSettings(context: Context) {

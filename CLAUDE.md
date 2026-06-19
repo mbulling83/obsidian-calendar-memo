@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A Kotlin/Jetpack Compose Android app for Boox e-ink tablets. It displays the user's Obsidian daily note meetings alongside a read-only Google Calendar overlay, provides a low-latency handwriting canvas, and manually converts handwriting to Markdown bullets (via Onyx's built-in MyScript HWR or OpenRouter AI vision) — writing results back into the daily note file on-device.
+A Kotlin/Jetpack Compose Android app for Boox e-ink tablets. It displays the user's Obsidian daily note meetings alongside a read-only Google Calendar overlay, provides a low-latency handwriting canvas, and manually converts handwriting to Markdown bullets (via Onyx's built-in MyScript HWR) — writing results back into the daily note file on-device.
 
 Target device: Boox U7 (and compatible Onyx Boox hardware running Android 10+, minSdk 29).
 
@@ -27,14 +27,6 @@ Target device: Boox U7 (and compatible Onyx Boox hardware running Android 10+, m
 ./gradlew test --tests "com.boxmemo.app.vault.*"
 ```
 
-## Secrets
-
-`local.properties` (gitignored) holds:
-```
-openrouter.apiKey=<your key>
-```
-This is injected into `BuildConfig.OPENROUTER_API_KEY` at build time. Never hardcode it.
-
 ## Architecture
 
 ### Package map
@@ -44,12 +36,11 @@ This is injected into `BuildConfig.OPENROUTER_API_KEY` at build time. Never hard
 | `calendar/` | Month grid + day view UI (`CalendarScreen`, `CalendarView`, `DayView`); `DayViewModel` owns merged Obsidian+GCal state |
 | `vault/` | All file I/O: `DailyNoteRepository` (single read/write owner), `VaultSettings` (path resolution), `MeetingSectionParser`, `NotesSectionParser` |
 | `memo/` | Handwriting surface: `OnyxInkSurfaceView` (raw pen input), `MemoCanvas` (Compose wrapper), `StrokeStore`, `ConversionActions` (triggers recognition and writes back) |
-| `hwr/` | Recognition engines: `OnyxHWREngine` (AIDL to firmware MyScript service), `VisionOcrClient` (OpenRouter vision), `TextEnhancementClient` (OpenRouter text polish), `BulletFormatter` |
+| `hwr/` | Recognition: `OnyxHWREngine` (AIDL to firmware MyScript service), `BulletFormatter` |
 | `gcal/` | `GoogleCalendarRepository` interface + `NoOpGoogleCalendarRepository` (GCal OAuth deferred) |
 | `quickadd/` | Quick-add form composables for adding meetings/notes via text |
 | `settings/` | `SettingsScreen`, `VaultSettingsStore` (DataStore), `PenSettingsStore` (DataStore), vault permission helpers |
 | `ui/` | Shared `AppTopBar`, typography |
-| `diagram/` | `DiagramConversionClient` (OpenRouter for diagram → image/HTML) |
 
 ### Key architectural decisions
 
@@ -63,7 +54,7 @@ This is injected into `BuildConfig.OPENROUTER_API_KEY` at build time. Never hard
 
 **`OnyxInkSurfaceView`** uses Onyx Pen SDK `TouchHelper` / raw-drawing mode: the e-ink controller renders ink at hardware latency, bypassing Compose's recomposition pipeline. Strokes are received *after* completion for persistence. Erasing: hardware (stylus side button → `onRawErasingTouchPointListReceived`) and UI eraser chip both remove strokes and trigger a full canvas redraw (Onyx firmware handles raw drawing visually but not erasing).
 
-**OpenRouter** is used as a thin REST client (no vendor SDK) at `https://openrouter.ai/api/v1/chat/completions`. The same endpoint shape handles both vision OCR and text enhancement. Default model: `google/gemini-2.0-flash-001`.
+**Handwriting → text recognition** goes entirely through the Onyx built-in MyScript engine (`OnyxHWREngine`). There are no cloud/AI recognition paths — the app makes no network calls.
 
 **Daily note path** follows the user's Periodic Notes convention: `Periodic Notes/Daily Notes/{year}/{MM - Month}/{yyyy-MM-dd}.md` — see `VaultSettings.DEFAULT_TEMPLATE`.
 
@@ -75,7 +66,7 @@ GCal OAuth is **deferred** — `NoOpGoogleCalendarRepository` is wired in `MainA
 
 ### Tests
 
-JVM unit tests (no Android runtime needed) cover parsers, formatters, `StrokeStore`, `EraseHitTest`, and `DailyNoteRepository`. `org.json:json:20231013` is on the test classpath so `JSONObject` works on JVM (the Android stub jar throws).
+JVM unit tests (no Android runtime needed) cover parsers, formatters, `StrokeStore`, `EraseHitTest`, and `DailyNoteRepository`.
 
 ## Daily Note Format Reference
 

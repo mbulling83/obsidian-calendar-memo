@@ -16,7 +16,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.boxmemo.app.hwr.RecognitionMethodPreference
 import com.boxmemo.app.memo.CaptureScope
 import com.boxmemo.app.memo.ConversionActions
 import com.boxmemo.app.memo.MemoSection
@@ -43,7 +42,6 @@ fun CalendarScreen(
     dailyNoteRepository: DailyNoteRepository,
     strokeStore: StrokeStore,
     penSettingsStore: PenSettingsStore,
-    recognitionMethodPreference: RecognitionMethodPreference,
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val penSettings by penSettingsStore.settings.collectAsState(initial = PenSettings())
@@ -93,7 +91,6 @@ fun CalendarScreen(
                     strokes = strokes,
                     flushStrokes = flushStrokes,
                     dailyNoteRepository = dailyNoteRepository,
-                    recognitionMethodPreference = recognitionMethodPreference,
                     onConverted = {
                         requestClear()
                         viewModel.selectDate(uiState.date)

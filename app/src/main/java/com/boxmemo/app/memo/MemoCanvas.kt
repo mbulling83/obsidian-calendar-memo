@@ -22,9 +22,9 @@ class InkFlushHandle {
 
 /**
  * Drawing surface scoped to a date + [CaptureScope] (a meeting entry, the
- * Notes section, or unscoped). Captures handwriting and diagrams alike —
- * the distinction between the two is made later, when the user manually
- * triggers conversion, not at capture time.
+ * Notes section, or unscoped). Captures handwriting, which the user later
+ * manually converts to text — recognition happens on demand, not at
+ * capture time.
  *
  * Backed by [OnyxInkSurfaceView] (Onyx Pen SDK raw drawing), the same
  * low-latency mechanism jdkruzr/aragonite uses — not a Compose `Canvas`

@@ -1,17 +1,8 @@
-import java.util.Properties
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
-
-// Secrets live only in local.properties (gitignored), never in source or git history.
-val localProperties = Properties().apply {
-    val file = rootProject.file("local.properties")
-    if (file.exists()) file.inputStream().use { load(it) }
-}
-val openRouterApiKey: String = localProperties.getProperty("openrouter.apiKey") ?: ""
 
 android {
     namespace = "com.boxmemo.app"
@@ -25,7 +16,6 @@ android {
         versionName = "0.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "OPENROUTER_API_KEY", "\"$openRouterApiKey\"")
     }
 
     buildTypes {
@@ -46,7 +36,6 @@ android {
 
     buildFeatures {
         compose = true
-        buildConfig = true
         aidl = true
     }
 
@@ -94,6 +83,11 @@ dependencies {
     }
     implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1") // required by onyx sdk
 
+    // Google ML Kit Digital Ink Recognition — on-device, offline, no firmware
+    // internals. Selectable alternative to the Onyx MyScript engine for
+    // comparison. Pulls com.google.android.gms:play-services-tasks transitively.
+    implementation("com.google.mlkit:digital-ink-recognition:19.0.0")
+
     // Jetpack Ink — e-ink-friendly stroke rendering (U6), matching Aragonite.
     implementation("androidx.ink:ink-nativeloader:1.0.0")
     implementation("androidx.ink:ink-brush:1.0.0")
@@ -102,7 +96,6 @@ dependencies {
     implementation("androidx.ink:ink-strokes:1.0.0")
 
     testImplementation("junit:junit:4.13.2")
-    testImplementation("org.json:json:20231013") // real org.json impl; the Android stub jar throws on JVM unit tests
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
 }

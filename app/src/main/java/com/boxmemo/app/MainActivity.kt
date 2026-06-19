@@ -20,10 +20,10 @@ import androidx.compose.ui.platform.LocalContext
 import com.boxmemo.app.calendar.CalendarScreen
 import com.boxmemo.app.calendar.DayViewModel
 import com.boxmemo.app.gcal.NoOpGoogleCalendarRepository
-import com.boxmemo.app.hwr.RecognitionMethodPreference
 import com.boxmemo.app.memo.PenSettingsStore
 import com.boxmemo.app.memo.StrokeStore
 import com.boxmemo.app.quickadd.QuickAddForm
+import com.boxmemo.app.settings.HwrSettingsStore
 import com.boxmemo.app.settings.SettingsScreen
 import com.boxmemo.app.settings.VaultPermission
 import com.boxmemo.app.settings.VaultSettingsStore
@@ -42,7 +42,7 @@ class MainActivity : ComponentActivity() {
 
         val store = VaultSettingsStore(applicationContext)
         val penSettingsStore = PenSettingsStore(applicationContext)
-        val recognitionMethodPreference = RecognitionMethodPreference(applicationContext)
+        val hwrSettingsStore = HwrSettingsStore(applicationContext)
 
         setContent {
             MaterialTheme(typography = BoxMemoTypography) {
@@ -86,7 +86,6 @@ class MainActivity : ComponentActivity() {
                                     dailyNoteRepository = dailyNoteRepository,
                                     strokeStore = strokeStore,
                                     penSettingsStore = penSettingsStore,
-                                    recognitionMethodPreference = recognitionMethodPreference,
                                 )
                             }
                         }
@@ -94,7 +93,7 @@ class MainActivity : ComponentActivity() {
                             SettingsScreen(
                                 store = store,
                                 penSettingsStore = penSettingsStore,
-                                recognitionMethodPreference = recognitionMethodPreference,
+                                hwrSettingsStore = hwrSettingsStore,
                                 onBack = { screen = Screen.CALENDAR },
                                 onRequestAllFilesAccess = { launchAllFilesAccessSettings(this@MainActivity) },
                                 hasAllFilesAccess = { VaultPermission.hasAllFilesAccess() },
