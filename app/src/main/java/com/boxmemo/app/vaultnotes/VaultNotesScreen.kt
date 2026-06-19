@@ -62,6 +62,7 @@ import com.boxmemo.app.vault.VaultEntry
 import com.boxmemo.app.vault.VaultFileIndex
 import com.boxmemo.app.vault.VaultFileRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -257,12 +258,24 @@ private fun SearchView(
 ) {
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<VaultEntry.MarkdownFile>>(emptyList()) }
+    // The exact (trimmed) query that `results` reflects. The empty-state message
+    // keys off this, not the live text, so "no matching notes" never flashes
+    // while you're still typing — it appears only once a search has actually run
+    // for what's in the box.
+    var searchedQuery by remember { mutableStateOf<String?>(null) }
 
-    // Filename matching is cheap, but a large vault walk shouldn't block the UI
-    // thread — recompute results off the main thread whenever the query settles.
-    LaunchedEffect(query) {
-        results = if (query.isBlank()) emptyList()
-        else withContext(Dispatchers.IO) { fileIndex.search(query) }
+    val trimmed = query.trim()
+    // Debounce so a large vault isn't walked on every keystroke; the delay is
+    // cancelled and restarted whenever the query changes again.
+    LaunchedEffect(trimmed) {
+        if (trimmed.isEmpty()) {
+            results = emptyList()
+            searchedQuery = null
+            return@LaunchedEffect
+        }
+        delay(250)
+        results = withContext(Dispatchers.IO) { fileIndex.search(trimmed) }
+        searchedQuery = trimmed
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -274,7 +287,7 @@ private fun SearchView(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
         Column(modifier = Modifier.fillMaxWidth().fillMaxHeight().verticalScroll(rememberScrollState())) {
-            if (query.isNotBlank() && results.isEmpty()) {
+            if (searchedQuery == trimmed && trimmed.isNotEmpty() && results.isEmpty()) {
                 Text(
                     text = "No matching notes.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -307,6 +320,8 @@ private fun VaultFileEditor(
     var guidelineStyle by remember { mutableStateOf(GuidelineStyle.None) }
     var showEraseAllConfirm by remember { mutableStateOf(false) }
     var statusMessage by remember(strokeKey) { mutableStateOf<String?>(null) }
+    // Collapse the existing-note pane to hand its width to the writing canvas.
+    var fileExpanded by remember(strokeKey) { mutableStateOf(true) }
 
     // File content, reloaded after each successful convert. `reloadKey` bumps to
     // force the LaunchedEffect to re-read from disk.
@@ -339,32 +354,36 @@ private fun VaultFileEditor(
         val maxLeftDp = maxWidth.value - minPaneDp
 
         Row(modifier = Modifier.fillMaxSize()) {
-            FileContentPane(
-                lines = lines,
-                insertIndex = insertIndex,
-                onInsertIndexChange = { insertIndex = it },
-                modifier = Modifier.width(leftWidthDp.dp).fillMaxHeight(),
-            )
-            // Vertical drag handle: drag right to grow the file pane, left to grow the canvas.
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(24.dp)
-                    .pointerInput(strokeKey) {
-                        detectHorizontalDragGestures { change, dragAmount ->
-                            change.consume()
-                            val deltaDp = with(density) { dragAmount.toDp().value }
-                            leftWidthDp = (leftWidthDp + deltaDp).coerceIn(minPaneDp, maxLeftDp)
-                        }
-                    },
-                contentAlignment = Alignment.Center,
-            ) {
+            // The existing-note pane and its drag handle are hidden when collapsed,
+            // so the canvas reclaims the full width.
+            if (fileExpanded) {
+                FileContentPane(
+                    lines = lines,
+                    insertIndex = insertIndex,
+                    onInsertIndexChange = { insertIndex = it },
+                    modifier = Modifier.width(leftWidthDp.dp).fillMaxHeight(),
+                )
+                // Vertical drag handle: drag right to grow the file pane, left to grow the canvas.
                 Box(
                     modifier = Modifier
-                        .width(4.dp)
-                        .fillMaxHeight(0.2f)
-                        .background(MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp)),
-                )
+                        .fillMaxHeight()
+                        .width(24.dp)
+                        .pointerInput(strokeKey) {
+                            detectHorizontalDragGestures { change, dragAmount ->
+                                change.consume()
+                                val deltaDp = with(density) { dragAmount.toDp().value }
+                                leftWidthDp = (leftWidthDp + deltaDp).coerceIn(minPaneDp, maxLeftDp)
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(4.dp)
+                            .fillMaxHeight(0.2f)
+                            .background(MaterialTheme.colorScheme.outline, RoundedCornerShape(2.dp)),
+                    )
+                }
             }
 
             Column(modifier = Modifier.weight(1f).fillMaxHeight().padding(4.dp)) {
@@ -373,6 +392,12 @@ private fun VaultFileEditor(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    FilterChip(
+                        selected = fileExpanded,
+                        onClick = { fileExpanded = !fileExpanded },
+                        label = { Text(if (fileExpanded) "Hide note" else "Show note") },
+                    )
+
                     FilterChip(
                         selected = guidelineStyle != GuidelineStyle.None,
                         onClick = {
