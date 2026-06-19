@@ -59,6 +59,28 @@ class OnyxInkSurfaceView(
         repaintClearingRawLayer()
     }
 
+    /**
+     * Forces the firmware to deliver any stroke it's still buffering, then
+     * returns every stroke now on this canvas.
+     *
+     * Onyx only hands a finished stroke to [rawInputCallback] when raw drawing
+     * is *disabled* — until then the ink is painted by the e-ink controller but
+     * hasn't reached our data. Previously that flush happened only in
+     * [surfaceDestroyed] (on navigation), so freshly-written ink wasn't in the
+     * store and Convert/Erase saw nothing until the user left and came back.
+     * Toggling raw drawing off→on here reproduces that delivery on demand: the
+     * pending stroke arrives synchronously via the callback (added to
+     * [currentStrokes] and pushed to the store) before this returns, so the
+     * caller gets a complete, up-to-date list without a round-trip.
+     */
+    fun flushAndGetStrokes(): List<StrokePath> {
+        touchHelper?.let { helper ->
+            helper.setRawDrawingEnabled(false)
+            helper.setRawDrawingEnabled(true)
+        }
+        return currentStrokes.toList()
+    }
+
     /** Changes guidelines without recreating the surface (just a repaint). */
     fun setGuidelineStyle(style: GuidelineStyle) {
         if (style == guidelineStyle) return

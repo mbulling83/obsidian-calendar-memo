@@ -42,6 +42,41 @@ class NotesSectionParserTest {
     }
 
     @Test
+    fun `reads existing note bullets, dropping blank lines`() {
+        val content = """
+            # 📝 Notes
+            - first note
+            - second note
+
+            ---
+            # 👥 Meetings
+            09:00 - 10:00: Standup
+        """.trimIndent()
+
+        assertEquals(listOf("- first note", "- second note"), parseNotesSection(content))
+    }
+
+    @Test
+    fun `reads notes through end of file when no trailing section`() {
+        val content = """
+            # 📝 Notes
+            - only note
+        """.trimIndent()
+
+        assertEquals(listOf("- only note"), parseNotesSection(content))
+    }
+
+    @Test
+    fun `returns empty list when there is no Notes heading`() {
+        val content = """
+            # 👥 Meetings
+            09:00 - 10:00: Standup
+        """.trimIndent()
+
+        assertEquals(emptyList<String>(), parseNotesSection(content))
+    }
+
+    @Test
     fun `returns SectionNotFound when the daily note has no Notes heading`() {
         val content = """
             # 👥 Meetings

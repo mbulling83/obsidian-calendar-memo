@@ -50,6 +50,12 @@ class DailyNoteRepository(private val vaultSettings: VaultSettings) {
         return parseMeetingsSection(content)
     }
 
+    /** Reads the existing bullet lines under the `# 📝 Notes` section (empty if none/unreadable). */
+    fun readNotes(date: LocalDate): List<String> {
+        val content = (readNote(date) as? DailyNoteReadResult.Found)?.content ?: return emptyList()
+        return parseNotesSection(content)
+    }
+
     /**
      * Writes [newContent] to the daily note for [date] via write-then-replace:
      * write to a sibling temp file, then atomically rename over the original,

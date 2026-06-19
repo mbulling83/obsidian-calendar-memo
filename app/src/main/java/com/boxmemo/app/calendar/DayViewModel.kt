@@ -17,6 +17,7 @@ import java.time.LocalDate
 data class DayUiState(
     val date: LocalDate,
     val events: List<DayEvent> = emptyList(),
+    val noteLines: List<String> = emptyList(),
     val meetingsSectionMissing: Boolean = false,
     val isLoading: Boolean = false,
 )
@@ -52,11 +53,13 @@ class DayViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             val meetingsResult = dailyNoteRepository.readMeetings(date)
             val meetings = (meetingsResult as? MeetingSectionParseResult.Found)?.entries.orEmpty()
+            val noteLines = dailyNoteRepository.readNotes(date)
             val googleEvents = googleCalendarRepository.fetchEvents(date)
 
             _uiState.value = DayUiState(
                 date = date,
                 events = mergeDayEvents(meetings, googleEvents),
+                noteLines = noteLines,
                 meetingsSectionMissing = meetingsResult == MeetingSectionParseResult.SectionNotFound,
                 isLoading = false,
             )

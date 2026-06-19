@@ -16,9 +16,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -148,7 +151,7 @@ private const val MAX_NOTED_HEIGHT_DP = 800f
  * Handwriting canvas for the currently selected scope (a meeting or Notes).
  * Scope selection is driven externally via the agenda panel. The toolbar row
  * hosts scope label, guideline picker, any injected toolbar actions (e.g.
- * Convert), and the Eraser chip — nothing below the canvas so the full
+ * Convert), and the Erase-all action — nothing below the canvas so the full
  * remaining height is available for writing.
  */
 @Composable
@@ -156,13 +159,23 @@ fun MemoSection(
     date: LocalDate,
     selectedScope: CaptureScope,
     meetings: List<DayEvent.ObsidianMeeting>,
+    noteLines: List<String>,
     strokeStore: StrokeStore,
     penSettings: PenSettings,
     modifier: Modifier = Modifier,
-    toolbarContent: @Composable RowScope.(CaptureScope, List<StrokePath>, requestClear: () -> Unit) -> Unit = { _, _, _ -> },
+    toolbarContent: @Composable RowScope.(
+        scope: CaptureScope,
+        strokes: List<StrokePath>,
+        flushStrokes: () -> List<StrokePath>,
+        requestClear: () -> Unit,
+    ) -> Unit = { _, _, _, _ -> },
 ) {
-    var isEraserActive by remember { mutableStateOf(false) }
+    // Bridges Convert/Erase to the live ink surface so they flush the pen
+    // buffer before acting — otherwise freshly-written ink isn't captured until
+    // the user navigates away and back. See [InkFlushHandle].
+    val inkHandle = remember { InkFlushHandle() }
     var guidelineStyle by remember { mutableStateOf(GuidelineStyle.None) }
+    var showEraseAllConfirm by remember { mutableStateOf(false) }
     var columnSplit by rememberSaveable { mutableStateOf(false) }
     var version by remember(date) { mutableIntStateOf(0) }
 
@@ -174,7 +187,13 @@ fun MemoSection(
 
     val selectedMeeting = (selectedScope as? CaptureScope.Meeting)
         ?.let { scope -> meetings.find { it.meetingIndex == scope.meetingIndex } }
-    val detailLines = selectedMeeting?.entry?.detailLines.orEmpty()
+    // "Already noted" content for the current scope: a meeting's detail bullets,
+    // or the page-level Notes bullets when the Notes scope is selected.
+    val detailLines = when (selectedScope) {
+        is CaptureScope.Meeting -> selectedMeeting?.entry?.detailLines.orEmpty()
+        CaptureScope.Notes -> noteLines
+        CaptureScope.Unscoped -> emptyList()
+    }
     val hasDetailLines = detailLines.isNotEmpty()
     var notesExpanded by rememberSaveable(detailLines.firstOrNull()) { mutableStateOf(true) }
     // Stacked-layout height of the "Already noted" scroll area, in dp, adjusted
@@ -224,7 +243,18 @@ fun MemoSection(
                 },
             )
 
-            toolbarContent(selectedScope, strokes) {
+            toolbarContent(
+                selectedScope,
+                strokes,
+                {
+                    // Flush the pen buffer, push any just-finished stroke into
+                    // the store, and hand the caller the full, current list.
+                    val current = inkHandle.flush()
+                    strokeStore.setStrokes(date, selectedScope, current)
+                    version++
+                    current
+                },
+            ) {
                 strokeStore.clear(date, selectedScope)
                 version++
             }
@@ -237,10 +267,51 @@ fun MemoSection(
                 )
             }
 
-            FilterChip(
-                selected = isEraserActive,
-                onClick = { isEraserActive = !isEraserActive },
-                label = { Text("Eraser") },
+            // "Erase all" wipes the current canvas in one action. Because any
+            // strokes still on it are handwriting that hasn't been converted to
+            // Markdown yet, clearing is destructive — so when strokes are
+            // present we confirm first. (Per-stroke erasing still works via the
+            // stylus side button in hardware.)
+            AssistChip(
+                onClick = {
+                    // Flush first so ink written since the last store update is
+                    // counted — otherwise a canvas that looks full reads as
+                    // empty and the action no-ops until the user navigates away.
+                    val current = inkHandle.flush()
+                    strokeStore.setStrokes(date, selectedScope, current)
+                    version++
+                    if (current.isEmpty()) return@AssistChip
+                    showEraseAllConfirm = true
+                },
+                label = { Text("Erase all") },
+            )
+        }
+
+        if (showEraseAllConfirm) {
+            AlertDialog(
+                onDismissRequest = { showEraseAllConfirm = false },
+                title = { Text("Erase all handwriting?") },
+                text = {
+                    Text(
+                        "This clears every stroke on this canvas. Anything you " +
+                            "haven't converted to notes yet will be lost. This " +
+                            "can't be undone.",
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            strokeStore.clear(date, selectedScope)
+                            version++
+                            showEraseAllConfirm = false
+                        },
+                    ) { Text("Erase all") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showEraseAllConfirm = false }) {
+                        Text("Cancel")
+                    }
+                },
             )
         }
 
@@ -250,7 +321,9 @@ fun MemoSection(
                     strokes = strokeStore.strokesFor(date, selectedScope),
                     penSettings = penSettings,
                     guidelineStyle = guidelineStyle,
-                    isEraserActive = isEraserActive,
+                    // No UI eraser mode anymore — per-stroke erasing is handled
+                    // by the stylus side button in hardware.
+                    isEraserActive = false,
                     onStrokeFinished = { stroke ->
                         strokeStore.addStroke(date, selectedScope, stroke)
                         version++
@@ -260,6 +333,7 @@ fun MemoSection(
                         version++
                     },
                     modifier = canvasModifier,
+                    flushHandle = inkHandle,
                 )
             }
         }

@@ -60,6 +60,7 @@ fun ConversionActions(
     date: LocalDate,
     scope: CaptureScope,
     strokes: List<StrokePath>,
+    flushStrokes: () -> List<StrokePath>,
     dailyNoteRepository: DailyNoteRepository,
     recognitionMethodPreference: RecognitionMethodPreference,
     onConverted: () -> Unit,
@@ -104,9 +105,20 @@ fun ConversionActions(
 
     FilterChip(
         selected = false,
-        enabled = strokes.isNotEmpty(),
+        // Always enabled: the freshly-written stroke isn't in `strokes` (the
+        // store snapshot) until the on-click flush runs, so gating on it here
+        // would leave Convert permanently greyed out. The flush below decides
+        // whether there's anything to convert.
         onClick = {
             coroutineScope.launch {
+                // Flush the pen buffer first so a stroke written since the last
+                // store update is recognized too — not just what reached the
+                // store before this tap.
+                val strokes = flushStrokes().ifEmpty { strokes }
+                if (strokes.isEmpty()) {
+                    statusMessage = "Nothing to convert."
+                    return@launch
+                }
                 val (captureWidth, captureHeight) = captureSizeFor(strokes)
                 when (method) {
                     RecognitionMethod.ONYX_BUILT_IN -> {

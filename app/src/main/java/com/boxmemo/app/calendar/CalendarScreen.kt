@@ -83,13 +83,15 @@ fun CalendarScreen(
             date = uiState.date,
             selectedScope = selectedScope,
             meetings = meetings,
+            noteLines = uiState.noteLines,
             strokeStore = strokeStore,
             penSettings = penSettings,
-            toolbarContent = { scope, strokes, requestClear ->
+            toolbarContent = { scope, strokes, flushStrokes, requestClear ->
                 ConversionActions(
                     date = uiState.date,
                     scope = scope,
                     strokes = strokes,
+                    flushStrokes = flushStrokes,
                     dailyNoteRepository = dailyNoteRepository,
                     recognitionMethodPreference = recognitionMethodPreference,
                     onConverted = {
