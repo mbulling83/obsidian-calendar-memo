@@ -29,6 +29,7 @@ import com.boxmemo.app.ui.AppTopBar
 import com.boxmemo.app.ui.BoxMemoTypography
 import com.boxmemo.app.vault.DailyNoteRepository
 import com.boxmemo.app.vault.VaultSettings
+import com.boxmemo.app.widget.AgendaWidgetProvider
 
 private enum class Screen { CALENDAR, SETTINGS }
 
@@ -105,5 +106,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // Reflect any edits made in-app on the home-screen agenda widget.
+        AgendaWidgetProvider.refresh(applicationContext)
     }
 }
