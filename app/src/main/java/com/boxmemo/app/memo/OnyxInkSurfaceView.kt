@@ -125,8 +125,8 @@ class OnyxInkSurfaceView(
     }
 
     private val guidelinePaint = Paint().apply {
-        color = Color.LTGRAY
-        strokeWidth = 1.5f
+        color = Color.GRAY
+        strokeWidth = 2.5f
         style = Paint.Style.STROKE
         isAntiAlias = false
     }
@@ -145,8 +145,8 @@ class OnyxInkSurfaceView(
             }
             GuidelineStyle.DotGrid -> {
                 val dotPaint = Paint().apply {
-                    color = Color.LTGRAY
-                    strokeWidth = 3f
+                    color = Color.DKGRAY
+                    strokeWidth = 6f
                     strokeCap = Paint.Cap.ROUND
                     style = Paint.Style.STROKE
                     isAntiAlias = true
