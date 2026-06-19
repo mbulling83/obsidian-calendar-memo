@@ -21,7 +21,9 @@ class MeetingDetailBulletWriterTest {
 
         val result = insertMeetingDetailBullets(
             content,
-            meetingIndex = 0,
+            startTime = "09:00",
+            endTime = "09:30",
+            title = "Standup",
             bulletLines = listOf("\t- New point one", "\t- New point two"),
         ) as MeetingWriteResult.Updated
 
@@ -35,7 +37,7 @@ class MeetingDetailBulletWriterTest {
     }
 
     @Test
-    fun `targets the correct meeting when two share the same start time`() {
+    fun `targets the correct meeting when two share the same start time but differ in title`() {
         val content = """
             # 👥 Meetings
 
@@ -45,10 +47,12 @@ class MeetingDetailBulletWriterTest {
             # Memos
         """.trimIndent()
 
-        // Index 1 is the second 09:00 meeting — previously unreachable.
+        // The two meetings share a start time; title disambiguates them.
         val result = insertMeetingDetailBullets(
             content,
-            meetingIndex = 1,
+            startTime = "09:00",
+            endTime = "09:30",
+            title = "Parallel sync",
             bulletLines = listOf("\t- Goes on the second meeting"),
         ) as MeetingWriteResult.Updated
 
@@ -58,7 +62,7 @@ class MeetingDetailBulletWriterTest {
     }
 
     @Test
-    fun `returns SectionNotFound when the meeting index is out of range`() {
+    fun `returns MeetingNotFound when no meeting matches the identity`() {
         val content = """
             # 👥 Meetings
 
@@ -67,8 +71,36 @@ class MeetingDetailBulletWriterTest {
             # Memos
         """.trimIndent()
 
-        val result = insertMeetingDetailBullets(content, meetingIndex = 3, bulletLines = listOf("\t- x"))
+        val result = insertMeetingDetailBullets(
+            content,
+            startTime = "10:00",
+            endTime = "10:30",
+            title = "Nope",
+            bulletLines = listOf("\t- x"),
+        )
 
-        assertTrue(result is MeetingWriteResult.SectionNotFound)
+        assertTrue(result is MeetingWriteResult.MeetingNotFound)
+    }
+
+    @Test
+    fun `returns AmbiguousMeeting when two meetings share start, end and title`() {
+        val content = """
+            # 👥 Meetings
+
+            - 09:00 - 09:30: Standup
+            - 09:00 - 09:30: Standup
+            ---
+            # Memos
+        """.trimIndent()
+
+        val result = insertMeetingDetailBullets(
+            content,
+            startTime = "09:00",
+            endTime = "09:30",
+            title = "Standup",
+            bulletLines = listOf("\t- x"),
+        )
+
+        assertTrue(result is MeetingWriteResult.AmbiguousMeeting)
     }
 }

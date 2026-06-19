@@ -3,13 +3,26 @@ package com.boxmemo.app.memo
 /**
  * What a handwriting capture is bound to: a specific meeting entry, the
  * page-level Notes section, or unscoped (not yet attached to anything).
- * Meetings are identified by their index within the day's meetings (file
- * order) rather than start time: start times are not unique within a day,
- * so keying on the time would make two meetings sharing one indistinguishable
- * — both would select together and only the first could be written to.
+ *
+ * [Meeting.meetingIndex] is the meeting's index within the day's meetings (file
+ * order). It exists only as an in-session disambiguator for UI selection and
+ * stroke keying: start times are not unique within a day, so keying selection
+ * on time alone would make two meetings sharing one indistinguishable.
+ *
+ * Write-back to the note, by contrast, locates the meeting by its content
+ * identity ([startTime], [endTime], [title]) rather than the index, so that
+ * converted bullets land on the right line even if the file was re-ordered on
+ * disk (e.g. by a concurrent LiveSync) since the day view was read. When that
+ * identity matches more than one meeting the write is refused rather than
+ * guessed — see DailyNoteRepository.addMeetingDetailBullets.
  */
 sealed interface CaptureScope {
-    data class Meeting(val meetingIndex: Int) : CaptureScope
+    data class Meeting(
+        val meetingIndex: Int,
+        val startTime: String = "",
+        val endTime: String = "",
+        val title: String = "",
+    ) : CaptureScope
     object Notes : CaptureScope
     object Unscoped : CaptureScope
 }

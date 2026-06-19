@@ -6,6 +6,7 @@ import com.boxmemo.app.gcal.GoogleCalendarRepository
 import com.boxmemo.app.vault.DailyNoteRepository
 import com.boxmemo.app.vault.MeetingEntry
 import com.boxmemo.app.vault.MeetingSectionParseResult
+import com.boxmemo.app.vault.NoteWriteOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,6 +35,14 @@ class DayViewModel(
     private val _uiState = MutableStateFlow(DayUiState(date = LocalDate.now()))
     val uiState: StateFlow<DayUiState> = _uiState.asStateFlow()
 
+    /** One-shot user-facing message (e.g. a failed quick-add), consumed by the UI. */
+    private val _message = MutableStateFlow<String?>(null)
+    val message: StateFlow<String?> = _message.asStateFlow()
+
+    fun messageShown() {
+        _message.value = null
+    }
+
     init {
         selectDate(LocalDate.now())
     }
@@ -57,10 +66,11 @@ class DayViewModel(
     /** Quick-add a new meeting (R5/R6), then refresh the day view. */
     fun addMeeting(startTime: String, endTime: String, title: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            dailyNoteRepository.addMeeting(
+            val outcome = dailyNoteRepository.addMeeting(
                 uiState.value.date,
                 MeetingEntry(startTime, endTime, title, emptyList()),
             )
+            _message.value = quickAddMessage(outcome, "meeting", "# 👥 Meetings")
             selectDate(uiState.value.date)
         }
     }
@@ -68,8 +78,23 @@ class DayViewModel(
     /** Quick-add a new note bullet (R5/R6), then refresh the day view. */
     fun addNote(text: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            dailyNoteRepository.addNote(uiState.value.date, text)
+            val outcome = dailyNoteRepository.addNote(uiState.value.date, text)
+            _message.value = quickAddMessage(outcome, "note", "# 📝 Notes")
             selectDate(uiState.value.date)
         }
     }
+
+    /** Maps a quick-add [outcome] to a user-facing warning, or null on success. */
+    private fun quickAddMessage(outcome: NoteWriteOutcome, kind: String, section: String): String? =
+        when (outcome) {
+            NoteWriteOutcome.Written -> null
+            NoteWriteOutcome.NoteMissing ->
+                "This day's note doesn't exist yet, so the $kind wasn't added. Create the daily note first."
+            NoteWriteOutcome.VaultNotConfigured ->
+                "No vault is configured yet — set one in Settings before adding a $kind."
+            NoteWriteOutcome.SectionMissing ->
+                "This note has no \"$section\" section, so the $kind wasn't added."
+            else ->
+                "Couldn't write the $kind to the note."
+        }
 }

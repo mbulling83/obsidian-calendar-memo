@@ -19,6 +19,12 @@ sealed interface MeetingSectionParseResult {
 sealed interface MeetingWriteResult {
     data class Updated(val content: String) : MeetingWriteResult
     object SectionNotFound : MeetingWriteResult
+
+    /** No meeting in the section matches the requested start/end/title. */
+    object MeetingNotFound : MeetingWriteResult
+
+    /** More than one meeting matches the requested start/end/title — refuse rather than guess. */
+    object AmbiguousMeeting : MeetingWriteResult
 }
 
 private data class SectionBounds(val headingIndex: Int, val sectionEnd: Int)
@@ -122,17 +128,26 @@ fun insertMeeting(noteContent: String, newEntry: MeetingEntry): MeetingWriteResu
 }
 
 /**
- * Appends [bulletLines] as the last detail lines under the meeting at
- * [meetingIndex] — the meeting's position within the section in file order,
- * matching the order [parseMeetingsSection] returns entries. An index
- * (rather than a start time) is used because start times are not unique
- * within a day: two meetings can share one, and keying on the time would
- * always target the first, leaving later same-time meetings unreachable.
+ * Appends [bulletLines] as the last detail lines under the meeting whose
+ * start/end/title match [startTime], [endTime] and [title]. Matching on the
+ * meeting's content identity (rather than a file-order index) keeps the write
+ * correct even if the section was re-ordered on disk — e.g. by a concurrent
+ * LiveSync — between the day view being read and this write. Start times are
+ * not unique within a day, so end time and title are included to disambiguate.
  * Existing bullets and every other meeting are left untouched (origin AE1).
- * Returns [MeetingWriteResult.SectionNotFound] if the section is absent or
- * [meetingIndex] is out of range — no write occurs in that case.
+ *
+ * Returns [MeetingWriteResult.SectionNotFound] if the section is absent,
+ * [MeetingWriteResult.MeetingNotFound] if no meeting matches, or
+ * [MeetingWriteResult.AmbiguousMeeting] if more than one does — no write
+ * occurs in any of those cases.
  */
-fun insertMeetingDetailBullets(noteContent: String, meetingIndex: Int, bulletLines: List<String>): MeetingWriteResult {
+fun insertMeetingDetailBullets(
+    noteContent: String,
+    startTime: String,
+    endTime: String,
+    title: String,
+    bulletLines: List<String>,
+): MeetingWriteResult {
     val lines = noteContent.lines().toMutableList()
     val bounds = findMeetingsSectionBounds(lines) ?: return MeetingWriteResult.SectionNotFound
     val (headingIndex, sectionEnd) = bounds
@@ -140,9 +155,22 @@ fun insertMeetingDetailBullets(noteContent: String, meetingIndex: Int, bulletLin
     val anchors = (headingIndex + 1 until sectionEnd)
         .filter { i -> MEETING_LINE.matchEntire(lines[i]) != null }
 
-    if (meetingIndex !in anchors.indices) return MeetingWriteResult.SectionNotFound
+    val matching = anchors.filter { i ->
+        val match = MEETING_LINE.matchEntire(lines[i])!!
+        match.groupValues[1] == startTime &&
+            match.groupValues[2] == endTime &&
+            match.groupValues[3] == title
+    }
 
-    val blockEnd = anchors.getOrNull(meetingIndex + 1) ?: sectionEnd
+    when {
+        matching.isEmpty() -> return MeetingWriteResult.MeetingNotFound
+        matching.size > 1 -> return MeetingWriteResult.AmbiguousMeeting
+    }
+
+    val anchorLine = matching.single()
+    val anchorPos = anchors.indexOf(anchorLine)
+    // End of this meeting's block = the next meeting line, or the section end.
+    val blockEnd = anchors.getOrNull(anchorPos + 1) ?: sectionEnd
     lines.addAll(blockEnd, bulletLines)
     return MeetingWriteResult.Updated(lines.joinToString("\n"))
 }

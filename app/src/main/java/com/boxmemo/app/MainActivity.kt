@@ -1,6 +1,7 @@
 package com.boxmemo.app
 
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
@@ -8,12 +9,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import com.boxmemo.app.calendar.CalendarScreen
 import com.boxmemo.app.calendar.DayViewModel
 import com.boxmemo.app.gcal.NoOpGoogleCalendarRepository
@@ -58,6 +61,17 @@ class MainActivity : ComponentActivity() {
 
                     var screen by remember { mutableStateOf(Screen.CALENDAR) }
                     var showAdd by remember { mutableStateOf(false) }
+
+                    // Surface quick-add warnings (e.g. the day's note doesn't
+                    // exist yet) rather than letting the add fail silently.
+                    val context = LocalContext.current
+                    val message by viewModel.message.collectAsState()
+                    LaunchedEffect(message) {
+                        message?.let {
+                            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+                            viewModel.messageShown()
+                        }
+                    }
 
                     when (screen) {
                         Screen.CALENDAR -> {

@@ -82,24 +82,45 @@ class DailyNoteRepositoryTest {
         noteFile.writeText("# 👥 Meetings\n\n- 09:00 - 09:30: Standup\n---\n# Memos\n")
 
         val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
-        val added = repo.addMeeting(date, MeetingEntry("14:00", "14:30", "Kickoff", emptyList()))
+        val outcome = repo.addMeeting(date, MeetingEntry("14:00", "14:30", "Kickoff", emptyList()))
 
-        assertTrue(added)
+        assertEquals(NoteWriteOutcome.Written, outcome)
         val entries = (repo.readMeetings(date) as MeetingSectionParseResult.Found).entries
         assertEquals(listOf("Standup", "Kickoff"), entries.map { it.title })
     }
 
     @Test
-    fun `addMeeting returns false and writes nothing when the note has no Meetings section`() {
+    fun `addMeeting reports NoteMissing and writes nothing when the day's note does not exist`() {
+        val date = LocalDate.of(2026, 6, 17)
+        val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
+
+        val outcome = repo.addMeeting(date, MeetingEntry("14:00", "14:30", "Kickoff", emptyList()))
+
+        assertEquals(NoteWriteOutcome.NoteMissing, outcome)
+        assertTrue(repo.readNote(date) is DailyNoteReadResult.NoteDoesNotExist)
+    }
+
+    @Test
+    fun `addNote reports NoteMissing when the day's note does not exist`() {
+        val date = LocalDate.of(2026, 6, 17)
+        val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
+
+        val outcome = repo.addNote(date, "remember to follow up")
+
+        assertEquals(NoteWriteOutcome.NoteMissing, outcome)
+    }
+
+    @Test
+    fun `addMeeting reports SectionMissing and writes nothing when the note has no Meetings section`() {
         val date = LocalDate.of(2026, 6, 17)
         val noteFile = tempFolder.newFolder("Periodic Notes", "Daily Notes", "2026", "06 - June")
             .resolve("2026-06-17.md")
         noteFile.writeText("# 📝 Notes\n")
 
         val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
-        val added = repo.addMeeting(date, MeetingEntry("14:00", "14:30", "Kickoff", emptyList()))
+        val outcome = repo.addMeeting(date, MeetingEntry("14:00", "14:30", "Kickoff", emptyList()))
 
-        assertTrue(!added)
+        assertEquals(NoteWriteOutcome.SectionMissing, outcome)
         assertEquals("# 📝 Notes\n", noteFile.readText())
     }
 
@@ -111,9 +132,9 @@ class DailyNoteRepositoryTest {
         noteFile.writeText("# 📝 Notes\n---\n# 👥 Meetings\n")
 
         val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
-        val added = repo.addNote(date, "remember to follow up")
+        val outcome = repo.addNote(date, "remember to follow up")
 
-        assertTrue(added)
+        assertEquals(NoteWriteOutcome.Written, outcome)
         assertTrue(noteFile.readText().contains("- remember to follow up"))
     }
 
@@ -125,9 +146,9 @@ class DailyNoteRepositoryTest {
         noteFile.writeText("# 👥 Meetings\n\n- 09:00 - 09:30: Standup\n---\n# Memos\n")
 
         val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
-        val added = repo.addMeetingDetailBullets(date, meetingIndex = 0, listOf("\t- Converted point"))
+        val outcome = repo.addMeetingDetailBullets(date, "09:00", "09:30", "Standup", listOf("\t- Converted point"))
 
-        assertTrue(added)
+        assertEquals(NoteWriteOutcome.Written, outcome)
         val entries = (repo.readMeetings(date) as MeetingSectionParseResult.Found).entries
         assertEquals(listOf("\t- Converted point"), entries.single().detailLines)
     }
@@ -142,12 +163,27 @@ class DailyNoteRepositoryTest {
         )
 
         val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
-        val added = repo.addMeetingDetailBullets(date, meetingIndex = 1, listOf("\t- Second meeting note"))
+        val outcome = repo.addMeetingDetailBullets(date, "09:00", "09:30", "Parallel sync", listOf("\t- Second meeting note"))
 
-        assertTrue(added)
+        assertEquals(NoteWriteOutcome.Written, outcome)
         val entries = (repo.readMeetings(date) as MeetingSectionParseResult.Found).entries
         assertEquals(emptyList<String>(), entries[0].detailLines)
         assertEquals(listOf("\t- Second meeting note"), entries[1].detailLines)
+    }
+
+    @Test
+    fun `addMeetingDetailBullets refuses to write when two meetings share the same identity`() {
+        val date = LocalDate.of(2026, 6, 17)
+        val original = "# 👥 Meetings\n\n- 09:00 - 09:30: Standup\n- 09:00 - 09:30: Standup\n---\n# Memos\n"
+        val noteFile = tempFolder.newFolder("Periodic Notes", "Daily Notes", "2026", "06 - June")
+            .resolve("2026-06-17.md")
+        noteFile.writeText(original)
+
+        val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
+        val outcome = repo.addMeetingDetailBullets(date, "09:00", "09:30", "Standup", listOf("\t- x"))
+
+        assertEquals(NoteWriteOutcome.AmbiguousMeeting, outcome)
+        assertEquals(original, noteFile.readText())
     }
 
     @Test
@@ -158,9 +194,9 @@ class DailyNoteRepositoryTest {
         noteFile.writeText("# 📝 Notes\n---\n# 👥 Meetings\n")
 
         val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
-        val added = repo.addNoteLines(date, listOf("- Converted point one", "- Converted point two"))
+        val outcome = repo.addNoteLines(date, listOf("- Converted point one", "- Converted point two"))
 
-        assertTrue(added)
+        assertEquals(NoteWriteOutcome.Written, outcome)
         val content = noteFile.readText()
         assertTrue(content.contains("- Converted point one"))
         assertTrue(content.contains("- Converted point two"))

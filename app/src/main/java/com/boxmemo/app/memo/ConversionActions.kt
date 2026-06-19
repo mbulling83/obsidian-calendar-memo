@@ -24,6 +24,7 @@ import com.boxmemo.app.hwr.VisionOcrClient
 import com.boxmemo.app.hwr.formatAsMeetingDetailLines
 import com.boxmemo.app.hwr.formatAsNoteLines
 import com.boxmemo.app.vault.DailyNoteRepository
+import com.boxmemo.app.vault.NoteWriteOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -69,16 +70,36 @@ fun ConversionActions(
     val method by recognitionMethodPreference.lastUsedMethod.collectAsState(initial = RecognitionMethod.ONYX_BUILT_IN)
 
     suspend fun writeBack(text: String) {
-        val written = withContext(Dispatchers.IO) {
+        val outcome = withContext(Dispatchers.IO) {
             when (scope) {
                 is CaptureScope.Meeting ->
-                    dailyNoteRepository.addMeetingDetailBullets(date, scope.meetingIndex, formatAsMeetingDetailLines(text))
+                    dailyNoteRepository.addMeetingDetailBullets(
+                        date,
+                        scope.startTime,
+                        scope.endTime,
+                        scope.title,
+                        formatAsMeetingDetailLines(text),
+                    )
                 else ->
                     dailyNoteRepository.addNoteLines(date, formatAsNoteLines(text))
             }
         }
-        statusMessage = if (written) "Converted and saved." else "Converted, but couldn't write to the note."
-        if (written) onConverted()
+        statusMessage = when (outcome) {
+            NoteWriteOutcome.Written -> "Converted and saved."
+            NoteWriteOutcome.AmbiguousMeeting ->
+                "Converted, but more than one meeting matches this time and title — rename one so they're distinct, then convert again."
+            NoteWriteOutcome.MeetingNotFound ->
+                "Converted, but this meeting is no longer in the note (it may have changed on disk)."
+            NoteWriteOutcome.SectionMissing ->
+                "Converted, but the note has no matching section to write to."
+            NoteWriteOutcome.NoteMissing ->
+                "Converted, but this day's note doesn't exist yet."
+            NoteWriteOutcome.VaultNotConfigured ->
+                "Converted, but no vault is configured."
+            NoteWriteOutcome.WriteFailed ->
+                "Converted, but couldn't write to the note."
+        }
+        if (outcome == NoteWriteOutcome.Written) onConverted()
     }
 
     FilterChip(
