@@ -1,14 +1,20 @@
 package com.boxmemo.app.memo
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -16,6 +22,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,9 +30,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
@@ -40,6 +51,69 @@ private fun renderWikiLinks(text: String): AnnotatedString = buildAnnotatedStrin
         append(text, cursor, match.range.first)
         pushStyle(SpanStyle(textDecoration = TextDecoration.Underline))
         append(match.groupValues[1].substringAfter('|'))
+        pop()
+        cursor = match.range.last + 1
+    }
+    append(text, cursor, text.length)
+}
+
+// Inline spans, in precedence order: wiki links, bold, strikethrough, inline
+// code, then italic. Bold (`**`/`__`) is matched before italic (`*`/`_`) so a
+// double marker isn't mistaken for two single ones. Each match contributes one
+// non-nested style — adequate for the bullet detail lines shown here.
+private val INLINE_MD = Regex(
+    """\[\[([^\]]+)]]""" +      // 1: [[wiki link]] / [[target|alias]]
+        """|\*\*([^*]+)\*\*""" + // 2: **bold**
+        """|__([^_]+)__""" +     // 3: __bold__
+        """|~~([^~]+)~~""" +     // 4: ~~strikethrough~~
+        """|`([^`]+)`""" +       // 5: `code`
+        """|\*([^*]+)\*""" +     // 6: *italic*
+        """|_([^_]+)_""",        // 7: _italic_
+)
+
+/**
+ * Renders the common inline Markdown found in daily-note bullets — bold,
+ * italic, strikethrough, inline code and `[[wiki links]]` — into a styled
+ * [AnnotatedString], with the markers themselves hidden. Anything unmatched is
+ * passed through verbatim.
+ */
+private fun renderInlineMarkdown(text: String): AnnotatedString = buildAnnotatedString {
+    var cursor = 0
+    for (match in INLINE_MD.findAll(text)) {
+        if (match.range.first < cursor) continue // overlaps a span already emitted
+        append(text, cursor, match.range.first)
+
+        val token = match.value
+        when {
+            token.startsWith("[[") -> {
+                pushStyle(SpanStyle(textDecoration = TextDecoration.Underline))
+                append(match.groupValues[1].substringAfter('|'))
+            }
+            token.startsWith("**") -> {
+                pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
+                append(match.groupValues[2])
+            }
+            token.startsWith("__") -> {
+                pushStyle(SpanStyle(fontWeight = FontWeight.Bold))
+                append(match.groupValues[3])
+            }
+            token.startsWith("~~") -> {
+                pushStyle(SpanStyle(textDecoration = TextDecoration.LineThrough))
+                append(match.groupValues[4])
+            }
+            token.startsWith("`") -> {
+                pushStyle(SpanStyle(fontFamily = FontFamily.Monospace))
+                append(match.groupValues[5])
+            }
+            token.startsWith("*") -> {
+                pushStyle(SpanStyle(fontStyle = FontStyle.Italic))
+                append(match.groupValues[6])
+            }
+            else -> { // _italic_
+                pushStyle(SpanStyle(fontStyle = FontStyle.Italic))
+                append(match.groupValues[7])
+            }
+        }
         pop()
         cursor = match.range.last + 1
     }
@@ -63,6 +137,12 @@ private fun parseBulletLine(rawLine: String): BulletLine {
     val text = if (rest.startsWith("- ")) rest.substring(2) else rest
     return BulletLine(maxOf(0, depth - 1), text)
 }
+
+// Stacked "Already noted" scroll-area height (dp): a useful default, dragged
+// between a couple of lines and most of the screen via the resize handle.
+private const val DEFAULT_NOTED_HEIGHT_DP = 320f
+private const val MIN_NOTED_HEIGHT_DP = 64f
+private const val MAX_NOTED_HEIGHT_DP = 800f
 
 /**
  * Handwriting canvas for the currently selected scope (a meeting or Notes).
@@ -97,6 +177,11 @@ fun MemoSection(
     val detailLines = selectedMeeting?.entry?.detailLines.orEmpty()
     val hasDetailLines = detailLines.isNotEmpty()
     var notesExpanded by rememberSaveable(detailLines.firstOrNull()) { mutableStateOf(true) }
+    // Stacked-layout height of the "Already noted" scroll area, in dp, adjusted
+    // by dragging the handle at its bottom edge with the stylus. Persisted as a
+    // UI preference across meetings/days.
+    var notedHeightDp by rememberSaveable { mutableFloatStateOf(DEFAULT_NOTED_HEIGHT_DP) }
+    val density = LocalDensity.current
 
     Column(modifier = modifier.fillMaxWidth().fillMaxHeight().padding(8.dp)) {
         Row(
@@ -203,11 +288,26 @@ fun MemoSection(
             }
         } else {
             if (hasDetailLines) {
+                // Stacked above the canvas: the noted lines occupy a fixed,
+                // stylus-resizable height and scroll within it, so a meeting
+                // with many notes can't crowd out the writing canvas below.
                 AlreadyNotedBlock(
                     detailLines = detailLines,
                     expanded = notesExpanded,
                     onToggleExpanded = { notesExpanded = !notesExpanded },
+                    linesModifier = Modifier
+                        .height(notedHeightDp.dp)
+                        .verticalScroll(rememberScrollState()),
                 )
+                if (notesExpanded) {
+                    NotedResizeHandle(
+                        onDrag = { dragPx ->
+                            val deltaDp = with(density) { dragPx.toDp().value }
+                            notedHeightDp = (notedHeightDp + deltaDp)
+                                .coerceIn(MIN_NOTED_HEIGHT_DP, MAX_NOTED_HEIGHT_DP)
+                        },
+                    )
+                }
             }
             canvas(Modifier.weight(1f))
         }
@@ -220,6 +320,7 @@ private fun AlreadyNotedBlock(
     expanded: Boolean,
     onToggleExpanded: () -> Unit,
     modifier: Modifier = Modifier,
+    linesModifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.padding(vertical = 4.dp)) {
         Row(
@@ -240,12 +341,12 @@ private fun AlreadyNotedBlock(
             )
         }
         if (expanded) {
-            Column(modifier = Modifier.padding(start = 8.dp)) {
+            Column(modifier = linesModifier.padding(start = 8.dp)) {
                 detailLines.forEach { rawLine ->
                     val bullet = parseBulletLine(rawLine)
                     Row(
                         modifier = Modifier.padding(
-                            start = (bullet.depth * 12).dp,
+                            start = (bullet.depth * 24).dp,
                             top = 1.dp,
                             bottom = 1.dp,
                         ),
@@ -256,12 +357,48 @@ private fun AlreadyNotedBlock(
                             modifier = Modifier.padding(end = 6.dp),
                         )
                         Text(
-                            text = renderWikiLinks(bullet.text),
+                            text = renderInlineMarkdown(bullet.text),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * A draggable divider sitting at the bottom edge of the stacked "Already noted"
+ * section. Dragging it down with the stylus grows the noted area (and shrinks
+ * the canvas); dragging up does the reverse. [onDrag] receives the vertical
+ * drag delta in pixels (positive = downward).
+ */
+@Composable
+private fun NotedResizeHandle(
+    onDrag: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(24.dp)
+            .pointerInput(Unit) {
+                detectVerticalDragGestures { change, dragAmount ->
+                    change.consume()
+                    onDrag(dragAmount)
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        // Grab bar, sized to read as a draggable affordance on e-ink.
+        Box(
+            modifier = Modifier
+                .width(48.dp)
+                .height(4.dp)
+                .background(
+                    color = MaterialTheme.colorScheme.outline,
+                    shape = RoundedCornerShape(2.dp),
+                ),
+        )
     }
 }
