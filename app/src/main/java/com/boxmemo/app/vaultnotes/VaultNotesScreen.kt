@@ -83,13 +83,23 @@ fun VaultNotesScreen(
     onBack: () -> Unit,
 ) {
     var selectedFile by remember { mutableStateOf<File?>(null) }
+    val context = LocalContext.current
+    val recentStore = remember { RecentItemsStore(context) }
+    val recentScope = rememberCoroutineScope()
 
     Column(modifier = Modifier.fillMaxSize()) {
         val file = selectedFile
         if (file == null) {
             FilePickerHeader(onBack = onBack)
             HorizontalDivider(thickness = 2.dp)
-            FilePicker(fileIndex = fileIndex, onFileSelected = { selectedFile = it })
+            FilePicker(
+                fileIndex = fileIndex,
+                recentStore = recentStore,
+                onFileSelected = {
+                    recentScope.launch { recentStore.addFile(it.absolutePath) }
+                    selectedFile = it
+                },
+            )
         } else {
             EditorHeader(fileName = file.name, onBack = { selectedFile = null })
             HorizontalDivider(thickness = 2.dp)
@@ -143,6 +153,7 @@ private enum class PickerMode { TREE, SEARCH }
 @Composable
 private fun FilePicker(
     fileIndex: VaultFileIndex,
+    recentStore: RecentItemsStore,
     onFileSelected: (File) -> Unit,
 ) {
     var mode by remember { mutableStateOf(PickerMode.TREE) }
@@ -163,7 +174,11 @@ private fun FilePicker(
 
         when (mode) {
             PickerMode.TREE -> TreeView(fileIndex = fileIndex, onFileSelected = onFileSelected)
-            PickerMode.SEARCH -> SearchView(fileIndex = fileIndex, onFileSelected = onFileSelected)
+            PickerMode.SEARCH -> SearchView(
+                fileIndex = fileIndex,
+                recentStore = recentStore,
+                onFileSelected = onFileSelected,
+            )
         }
     }
 }
@@ -254,6 +269,7 @@ private fun FileRow(
 @Composable
 private fun SearchView(
     fileIndex: VaultFileIndex,
+    recentStore: RecentItemsStore,
     onFileSelected: (File) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
@@ -263,6 +279,14 @@ private fun SearchView(
     // while you're still typing — it appears only once a search has actually run
     // for what's in the box.
     var searchedQuery by remember { mutableStateOf<String?>(null) }
+
+    val recentSearches by recentStore.recentSearches.collectAsState(initial = emptyList())
+    val recentPaths by recentStore.recentFiles.collectAsState(initial = emptyList())
+    // Drop any remembered files that have since been deleted/moved so we never
+    // offer a dead link.
+    val recentFiles = remember(recentPaths) {
+        recentPaths.map(::File).filter { it.exists() }
+    }
 
     val trimmed = query.trim()
     // Debounce so a large vault isn't walked on every keystroke; the delay is
@@ -276,6 +300,8 @@ private fun SearchView(
         delay(250)
         results = withContext(Dispatchers.IO) { fileIndex.search(trimmed) }
         searchedQuery = trimmed
+        // Only remember searches that actually matched something.
+        if (results.isNotEmpty()) recentStore.addSearch(trimmed)
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -287,17 +313,69 @@ private fun SearchView(
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         )
         Column(modifier = Modifier.fillMaxWidth().fillMaxHeight().verticalScroll(rememberScrollState())) {
-            if (searchedQuery == trimmed && trimmed.isNotEmpty() && results.isEmpty()) {
-                Text(
-                    text = "No matching notes.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(top = 12.dp),
-                )
-            }
-            results.forEach { entry ->
-                FileRow(entry, depth = 0, onClick = { onFileSelected(entry.file) })
+            if (trimmed.isEmpty()) {
+                // Nothing typed yet: surface recent searches and recently opened
+                // files as quick re-entry points.
+                if (recentSearches.isNotEmpty()) {
+                    RecentSectionHeader("Recent searches")
+                    recentSearches.forEach { term ->
+                        RecentRow(label = term, leading = "🔍", onClick = { query = term })
+                    }
+                }
+                if (recentFiles.isNotEmpty()) {
+                    RecentSectionHeader("Recent files")
+                    recentFiles.forEach { file ->
+                        RecentRow(
+                            label = file.name.removeSuffix(".md"),
+                            leading = "📄",
+                            onClick = { onFileSelected(file) },
+                        )
+                    }
+                }
+                if (recentSearches.isEmpty() && recentFiles.isEmpty()) {
+                    Text(
+                        text = "Type to search filenames across the vault.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+            } else {
+                if (searchedQuery == trimmed && results.isEmpty()) {
+                    Text(
+                        text = "No matching notes.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                }
+                results.forEach { entry ->
+                    FileRow(entry, depth = 0, onClick = { onFileSelected(entry.file) })
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun RecentSectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(top = 14.dp, bottom = 2.dp),
+    )
+}
+
+@Composable
+private fun RecentRow(label: String, leading: String, onClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text = leading, modifier = Modifier.padding(end = 8.dp))
+        Text(text = label, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
