@@ -125,11 +125,29 @@ class DailyNoteRepositoryTest {
         noteFile.writeText("# 👥 Meetings\n\n- 09:00 - 09:30: Standup\n---\n# Memos\n")
 
         val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
-        val added = repo.addMeetingDetailBullets(date, "09:00", listOf("\t- Converted point"))
+        val added = repo.addMeetingDetailBullets(date, meetingIndex = 0, listOf("\t- Converted point"))
 
         assertTrue(added)
         val entries = (repo.readMeetings(date) as MeetingSectionParseResult.Found).entries
         assertEquals(listOf("\t- Converted point"), entries.single().detailLines)
+    }
+
+    @Test
+    fun `addMeetingDetailBullets writes to the right meeting when two share a start time`() {
+        val date = LocalDate.of(2026, 6, 17)
+        val noteFile = tempFolder.newFolder("Periodic Notes", "Daily Notes", "2026", "06 - June")
+            .resolve("2026-06-17.md")
+        noteFile.writeText(
+            "# 👥 Meetings\n\n- 09:00 - 09:30: Standup\n- 09:00 - 09:30: Parallel sync\n---\n# Memos\n",
+        )
+
+        val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
+        val added = repo.addMeetingDetailBullets(date, meetingIndex = 1, listOf("\t- Second meeting note"))
+
+        assertTrue(added)
+        val entries = (repo.readMeetings(date) as MeetingSectionParseResult.Found).entries
+        assertEquals(emptyList<String>(), entries[0].detailLines)
+        assertEquals(listOf("\t- Second meeting note"), entries[1].detailLines)
     }
 
     @Test

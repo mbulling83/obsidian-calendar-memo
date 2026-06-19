@@ -72,7 +72,7 @@ fun ConversionActions(
         val written = withContext(Dispatchers.IO) {
             when (scope) {
                 is CaptureScope.Meeting ->
-                    dailyNoteRepository.addMeetingDetailBullets(date, scope.startTime, formatAsMeetingDetailLines(text))
+                    dailyNoteRepository.addMeetingDetailBullets(date, scope.meetingIndex, formatAsMeetingDetailLines(text))
                 else ->
                     dailyNoteRepository.addNoteLines(date, formatAsNoteLines(text))
             }

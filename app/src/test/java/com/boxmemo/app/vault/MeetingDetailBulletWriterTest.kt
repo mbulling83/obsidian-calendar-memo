@@ -21,7 +21,7 @@ class MeetingDetailBulletWriterTest {
 
         val result = insertMeetingDetailBullets(
             content,
-            startTime = "09:00",
+            meetingIndex = 0,
             bulletLines = listOf("\t- New point one", "\t- New point two"),
         ) as MeetingWriteResult.Updated
 
@@ -35,7 +35,30 @@ class MeetingDetailBulletWriterTest {
     }
 
     @Test
-    fun `returns SectionNotFound when no meeting matches the given start time`() {
+    fun `targets the correct meeting when two share the same start time`() {
+        val content = """
+            # 👥 Meetings
+
+            - 09:00 - 09:30: Standup
+            - 09:00 - 09:30: Parallel sync
+            ---
+            # Memos
+        """.trimIndent()
+
+        // Index 1 is the second 09:00 meeting — previously unreachable.
+        val result = insertMeetingDetailBullets(
+            content,
+            meetingIndex = 1,
+            bulletLines = listOf("\t- Goes on the second meeting"),
+        ) as MeetingWriteResult.Updated
+
+        val parsed = (parseMeetingsSection(result.content) as MeetingSectionParseResult.Found).entries
+        assertEquals(emptyList<String>(), parsed[0].detailLines)
+        assertEquals(listOf("\t- Goes on the second meeting"), parsed[1].detailLines)
+    }
+
+    @Test
+    fun `returns SectionNotFound when the meeting index is out of range`() {
         val content = """
             # 👥 Meetings
 
@@ -44,7 +67,7 @@ class MeetingDetailBulletWriterTest {
             # Memos
         """.trimIndent()
 
-        val result = insertMeetingDetailBullets(content, startTime = "11:00", bulletLines = listOf("\t- x"))
+        val result = insertMeetingDetailBullets(content, meetingIndex = 3, bulletLines = listOf("\t- x"))
 
         assertTrue(result is MeetingWriteResult.SectionNotFound)
     }

@@ -22,11 +22,11 @@ class StrokeStoreTest {
     @Test
     fun `switching scope does not bleed strokes from one scope into another`() {
         val store = StrokeStore()
-        store.addStroke(date, CaptureScope.Meeting("09:00"), strokeA)
-        store.addStroke(date, CaptureScope.Meeting("14:00"), strokeB)
+        store.addStroke(date, CaptureScope.Meeting(0), strokeA)
+        store.addStroke(date, CaptureScope.Meeting(1), strokeB)
 
-        assertEquals(listOf(strokeA), store.strokesFor(date, CaptureScope.Meeting("09:00")))
-        assertEquals(listOf(strokeB), store.strokesFor(date, CaptureScope.Meeting("14:00")))
+        assertEquals(listOf(strokeA), store.strokesFor(date, CaptureScope.Meeting(0)))
+        assertEquals(listOf(strokeB), store.strokesFor(date, CaptureScope.Meeting(1)))
     }
 
     @Test
@@ -48,11 +48,11 @@ class StrokeStoreTest {
     fun `clear removes only the targeted date-scope pair`() {
         val store = StrokeStore()
         store.addStroke(date, CaptureScope.Notes, strokeA)
-        store.addStroke(date, CaptureScope.Meeting("09:00"), strokeB)
+        store.addStroke(date, CaptureScope.Meeting(0), strokeB)
 
         store.clear(date, CaptureScope.Notes)
 
         assertEquals(emptyList<StrokePath>(), store.strokesFor(date, CaptureScope.Notes))
-        assertEquals(listOf(strokeB), store.strokesFor(date, CaptureScope.Meeting("09:00")))
+        assertEquals(listOf(strokeB), store.strokesFor(date, CaptureScope.Meeting(0)))
     }
 }

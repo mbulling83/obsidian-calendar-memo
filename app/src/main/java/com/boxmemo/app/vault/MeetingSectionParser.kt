@@ -122,24 +122,27 @@ fun insertMeeting(noteContent: String, newEntry: MeetingEntry): MeetingWriteResu
 }
 
 /**
- * Appends [bulletLines] as the last detail lines under the meeting whose
- * start time is [startTime], leaving that meeting's existing bullets and
- * every other meeting untouched (origin AE1). Returns
- * [MeetingWriteResult.SectionNotFound] if the section or the target
- * meeting can't be located — no write occurs in that case.
+ * Appends [bulletLines] as the last detail lines under the meeting at
+ * [meetingIndex] — the meeting's position within the section in file order,
+ * matching the order [parseMeetingsSection] returns entries. An index
+ * (rather than a start time) is used because start times are not unique
+ * within a day: two meetings can share one, and keying on the time would
+ * always target the first, leaving later same-time meetings unreachable.
+ * Existing bullets and every other meeting are left untouched (origin AE1).
+ * Returns [MeetingWriteResult.SectionNotFound] if the section is absent or
+ * [meetingIndex] is out of range — no write occurs in that case.
  */
-fun insertMeetingDetailBullets(noteContent: String, startTime: String, bulletLines: List<String>): MeetingWriteResult {
+fun insertMeetingDetailBullets(noteContent: String, meetingIndex: Int, bulletLines: List<String>): MeetingWriteResult {
     val lines = noteContent.lines().toMutableList()
     val bounds = findMeetingsSectionBounds(lines) ?: return MeetingWriteResult.SectionNotFound
     val (headingIndex, sectionEnd) = bounds
 
     val anchors = (headingIndex + 1 until sectionEnd)
-        .mapNotNull { i -> MEETING_LINE.matchEntire(lines[i])?.let { i to it.groupValues[1] } }
+        .filter { i -> MEETING_LINE.matchEntire(lines[i]) != null }
 
-    val targetPos = anchors.indexOfFirst { (_, t) -> t == startTime }
-    if (targetPos == -1) return MeetingWriteResult.SectionNotFound
+    if (meetingIndex !in anchors.indices) return MeetingWriteResult.SectionNotFound
 
-    val blockEnd = anchors.getOrNull(targetPos + 1)?.first ?: sectionEnd
+    val blockEnd = anchors.getOrNull(meetingIndex + 1) ?: sectionEnd
     lines.addAll(blockEnd, bulletLines)
     return MeetingWriteResult.Updated(lines.joinToString("\n"))
 }

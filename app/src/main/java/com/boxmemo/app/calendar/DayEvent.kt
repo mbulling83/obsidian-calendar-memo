@@ -15,7 +15,13 @@ sealed interface DayEvent {
     val startTime: LocalTime
     val title: String
 
-    data class ObsidianMeeting(val entry: MeetingEntry) : DayEvent {
+    /**
+     * [meetingIndex] is the meeting's position within the daily note's
+     * `# 👥 Meetings` section in file order — the stable identity used to
+     * disambiguate meetings that share a start time (which start time alone
+     * cannot do). It survives the chronological re-sort in [mergeDayEvents].
+     */
+    data class ObsidianMeeting(val entry: MeetingEntry, val meetingIndex: Int) : DayEvent {
         override val startTime: LocalTime = LocalTime.parse(entry.startTime)
         override val title: String = entry.title
     }
@@ -35,7 +41,7 @@ fun mergeDayEvents(
     meetings: List<MeetingEntry>,
     googleEvents: List<GoogleCalendarEvent>,
 ): List<DayEvent> {
-    val obsidianEvents = meetings.map { DayEvent.ObsidianMeeting(it) }
+    val obsidianEvents = meetings.mapIndexed { index, entry -> DayEvent.ObsidianMeeting(entry, index) }
     val googleDayEvents = googleEvents.map { DayEvent.FromGoogleCalendar(it) }
 
     return (obsidianEvents + googleDayEvents).sortedWith(

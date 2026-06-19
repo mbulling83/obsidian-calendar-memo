@@ -93,7 +93,7 @@ fun MemoSection(
     val strokes = strokeStore.strokesFor(date, selectedScope)
 
     val selectedMeeting = (selectedScope as? CaptureScope.Meeting)
-        ?.let { scope -> meetings.find { it.entry.startTime == scope.startTime } }
+        ?.let { scope -> meetings.find { it.meetingIndex == scope.meetingIndex } }
     val detailLines = selectedMeeting?.entry?.detailLines.orEmpty()
     val hasDetailLines = detailLines.isNotEmpty()
     var notesExpanded by rememberSaveable(detailLines.firstOrNull()) { mutableStateOf(true) }
@@ -106,8 +106,8 @@ fun MemoSection(
         ) {
             val scopeLabel = when (selectedScope) {
                 is CaptureScope.Meeting -> {
-                    val meeting = meetings.find { it.entry.startTime == selectedScope.startTime }
-                    meeting?.entry?.title ?: selectedScope.startTime
+                    val meeting = meetings.find { it.meetingIndex == selectedScope.meetingIndex }
+                    meeting?.entry?.title ?: meeting?.entry?.startTime.orEmpty()
                 }
                 CaptureScope.Notes -> "Notes"
                 CaptureScope.Unscoped -> "Unscoped"

@@ -115,7 +115,7 @@ private fun ObsidianMeetingRow(
     selectedScope: CaptureScope,
     onScopeSelected: (CaptureScope) -> Unit,
 ) {
-    val scope = CaptureScope.Meeting(event.entry.startTime)
+    val scope = CaptureScope.Meeting(event.meetingIndex)
     val isSelected = selectedScope == scope
 
     Row(

@@ -37,6 +37,28 @@ class DayEventTest {
     }
 
     @Test
+    fun `meeting index reflects file order and survives the chronological re-sort`() {
+        // Given in reverse-chronological file order, two share a start time.
+        val merged = mergeDayEvents(
+            meetings = listOf(
+                meeting("14:00", "15:00", "Afternoon"),
+                meeting("09:00", "09:30", "Standup"),
+                meeting("09:00", "09:30", "Parallel sync"),
+            ),
+            googleEvents = emptyList(),
+        )
+
+        val byIndex = merged
+            .filterIsInstance<DayEvent.ObsidianMeeting>()
+            .associate { it.meetingIndex to it.title }
+        // Indices stay tied to file order even though display order is sorted.
+        assertEquals(mapOf(0 to "Afternoon", 1 to "Standup", 2 to "Parallel sync"), byIndex)
+        // The two 09:00 meetings carry distinct indices, so they're addressable.
+        // (Display order sorts ties by title: "Parallel sync" before "Standup".)
+        assertEquals(listOf("Parallel sync", "Standup", "Afternoon"), merged.map { it.title })
+    }
+
+    @Test
     fun `an empty day with no meetings and no events merges to an empty list`() {
         val merged = mergeDayEvents(meetings = emptyList(), googleEvents = emptyList())
 
