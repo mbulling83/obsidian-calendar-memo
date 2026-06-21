@@ -6,6 +6,7 @@ import android.graphics.Paint
 import java.time.LocalDate
 import java.time.YearMonth
 import kotlin.math.ceil
+import kotlin.math.min
 
 private val WEEKDAYS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
@@ -38,8 +39,10 @@ fun drawMonthGrid(
     val weeks = weekRowsFor(month)
     val cellWidth = width / 7f
     val gridTop = headerHeight
-    val gridHeight = height - gridTop
-    val cellHeight = gridHeight / weeks
+    // Square cells (cellWidth tall), but never taller than the space available
+    // so the grid always fits. The leftover space below becomes a Notes area.
+    val cellHeight = min(cellWidth, (height - gridTop) / weeks)
+    val gridBottom = gridTop + cellHeight * weeks
 
     val linePaint = Paint().apply {
         color = Color.GRAY
@@ -79,13 +82,13 @@ fun drawMonthGrid(
         canvas.drawText(WEEKDAYS[d], cellWidth * d + cellWidth / 2f, headerBaseline, headerPaint)
     }
 
-    // Grid lines: verticals full height, horizontals across the grid body.
+    // Grid lines: verticals and horizontals bounded to the (square-celled) grid.
     for (c in 0..7) {
         val x = (cellWidth * c).coerceAtMost(width - 1f)
-        canvas.drawLine(x, gridTop, x, height.toFloat(), linePaint)
+        canvas.drawLine(x, gridTop, x, gridBottom, linePaint)
     }
     for (r in 0..weeks) {
-        val y = (gridTop + cellHeight * r).coerceAtMost(height - 1f)
+        val y = gridTop + cellHeight * r
         canvas.drawLine(0f, y, width.toFloat(), y, linePaint)
     }
 
@@ -109,5 +112,31 @@ fun drawMonthGrid(
             canvas.drawCircle(textX + radius / 2.5f, baseline + paint.ascent() / 2.5f, radius, todayCirclePaint)
         }
         canvas.drawText(day.toString(), textX, baseline, paint)
+    }
+
+    // Notes section in the leftover space below the square grid.
+    val notesTop = gridBottom + 12f * density
+    if (height - notesTop > 48f * density) {
+        val notesLabelPaint = Paint().apply {
+            color = Color.BLACK
+            textSize = 18f * density
+            isAntiAlias = true
+            isFakeBoldText = true
+        }
+        val ruledPaint = Paint().apply {
+            color = Color.LTGRAY
+            strokeWidth = 1.2f * density
+            style = Paint.Style.STROKE
+            isAntiAlias = false
+        }
+        val labelBaseline = notesTop - notesLabelPaint.ascent()
+        canvas.drawText("Notes", 6f * density, labelBaseline, notesLabelPaint)
+        // Light ruled lines inviting handwriting, starting below the label.
+        val ruleSpacing = 40f * density
+        var y = labelBaseline + notesLabelPaint.descent() + ruleSpacing
+        while (y < height - 4f * density) {
+            canvas.drawLine(6f * density, y, width - 6f * density, y, ruledPaint)
+            y += ruleSpacing
+        }
     }
 }
