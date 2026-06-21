@@ -6,10 +6,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -77,7 +77,7 @@ fun AppTopBar(
                 Icon(Icons.Filled.DateRange, contentDescription = "Jump to today")
             }
             IconButton(onClick = onVaultNotesClick) {
-                Icon(Icons.Filled.Edit, contentDescription = "Vault notes")
+                Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Vault notes")
             }
             IconButton(onClick = onMonthScribbleClick) {
                 Icon(Icons.Filled.Create, contentDescription = "Scribble calendar")

@@ -42,8 +42,8 @@ fun drawMonthGrid(
     val cellHeight = gridHeight / weeks
 
     val linePaint = Paint().apply {
-        color = Color.DKGRAY
-        strokeWidth = 2.5f * density
+        color = Color.GRAY
+        strokeWidth = 1.8f * density
         style = Paint.Style.STROKE
         isAntiAlias = false
     }
