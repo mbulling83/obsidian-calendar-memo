@@ -91,13 +91,16 @@ fun MonthScribbleScreen(
     val state = rememberUpdatedState(
         Triple(month, canvasW to canvasH, strokes),
     )
-    fun saveCurrent() {
+    // [flush] toggles the pen's raw-drawing layer to drain any buffered stroke,
+    // which also wipes the on-screen ink (the surface doesn't repaint after a
+    // flush). So only flush when we're leaving the month anyway — the periodic
+    // autosave persists the `strokes` state directly (every completed stroke is
+    // already delivered there via onStrokeFinished), leaving the canvas intact.
+    fun saveCurrent(flush: Boolean) {
         val (m, dims, currentState) = state.value
         val (w, h) = dims
         if (w <= 0 || h <= 0) return
-        // Flush synchronously so freshly-written ink is captured, then persist
-        // off the main thread.
-        val current = inkHandle.flush().ifEmpty { currentState }
+        val current = if (flush) inkHandle.flush().ifEmpty { currentState } else currentState
         coroutineScope.launch(Dispatchers.IO) {
             store.save(MonthScribble(m, w, h, current))
         }
@@ -105,7 +108,7 @@ fun MonthScribbleScreen(
 
     fun goTo(target: YearMonth) {
         if (target == month) return
-        saveCurrent()
+        saveCurrent(flush = true)
         isEraser = false
         month = target
     }
@@ -113,12 +116,12 @@ fun MonthScribbleScreen(
     LaunchedEffect(saveTick) {
         if (saveTick == 0) return@LaunchedEffect
         delay(AUTOSAVE_DELAY_MS)
-        saveCurrent()
+        saveCurrent(flush = false)
     }
 
     // Save the month currently on screen when leaving the screen.
     DisposableEffect(Unit) {
-        onDispose { saveCurrent() }
+        onDispose { saveCurrent(flush = true) }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -151,10 +154,9 @@ fun MonthScribbleScreen(
                 label = { Text(if (isEraser) "Erase ✓" else "Erase") },
             )
             AssistChip(
-                onClick = {
-                    val current = inkHandle.flush().ifEmpty { strokes }
-                    if (current.isNotEmpty()) showClearConfirm = true
-                },
+                // Check the strokes state, not inkHandle.flush(): a flush would
+                // wipe the visible ink, which is wrong if the user then cancels.
+                onClick = { if (strokes.isNotEmpty()) showClearConfirm = true },
                 label = { Text("Clear month") },
             )
         }
