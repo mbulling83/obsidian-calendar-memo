@@ -20,3 +20,13 @@ fun formatAsMeetingDetailLines(text: String): List<String> =
 /** Plain (non-nested) bullets matching the page-level Notes section style. */
 fun formatAsNoteLines(text: String): List<String> =
     formatAsBullets(text).map { "- $it" }
+
+/**
+ * Embeds a saved diagram image as a nested detail bullet under a meeting,
+ * using Obsidian's `![[filename]]` wiki-embed (resolves by filename anywhere in
+ * the vault).
+ */
+fun formatDiagramMeetingDetailLine(fileName: String): String = "\t- ![[$fileName]]"
+
+/** Embeds a saved diagram image as a plain (non-nested) bullet, e.g. for the Notes section. */
+fun formatDiagramNoteLine(fileName: String): String = "- ![[$fileName]]"

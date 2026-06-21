@@ -18,11 +18,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.boxmemo.app.memo.CaptureScope
 import com.boxmemo.app.memo.ConversionActions
+import com.boxmemo.app.memo.DiagramSaveAction
 import com.boxmemo.app.memo.MemoSection
 import com.boxmemo.app.memo.PenSettingsStore
 import com.boxmemo.app.memo.PenSettings
 import com.boxmemo.app.memo.StrokeStore
 import com.boxmemo.app.vault.DailyNoteRepository
+import com.boxmemo.app.vault.DiagramRepository
 import java.time.YearMonth
 
 // Calendar header + 6 week rows at CalendarView's compact ROW_HEIGHT, plus
@@ -40,6 +42,7 @@ private val CALENDAR_SECTION_HEIGHT = 280.dp
 fun CalendarScreen(
     viewModel: DayViewModel,
     dailyNoteRepository: DailyNoteRepository,
+    diagramRepository: DiagramRepository,
     strokeStore: StrokeStore,
     penSettingsStore: PenSettingsStore,
 ) {
@@ -95,6 +98,18 @@ fun CalendarScreen(
                         requestClear()
                         viewModel.selectDate(uiState.date)
                     },
+                )
+                DiagramSaveAction(
+                    date = uiState.date,
+                    scope = scope,
+                    strokes = strokes,
+                    flushStrokes = flushStrokes,
+                    penSettings = penSettings,
+                    diagramRepository = diagramRepository,
+                    dailyNoteRepository = dailyNoteRepository,
+                    // Refresh the day view so the new image bullet appears, but
+                    // keep the strokes on the canvas (saving doesn't consume them).
+                    onSaved = { viewModel.selectDate(uiState.date) },
                 )
             },
         )

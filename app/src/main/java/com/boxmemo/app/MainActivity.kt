@@ -32,6 +32,7 @@ import com.boxmemo.app.ui.AppTopBar
 import com.boxmemo.app.ui.BoxMemoTypography
 import com.boxmemo.app.memo.PenSettings
 import com.boxmemo.app.vault.DailyNoteRepository
+import com.boxmemo.app.vault.DiagramRepository
 import com.boxmemo.app.vault.VaultFileIndex
 import com.boxmemo.app.vault.VaultFileRepository
 import com.boxmemo.app.vault.VaultSettings
@@ -62,6 +63,7 @@ class MainActivity : ComponentActivity() {
                         DayViewModel(dailyNoteRepository, NoOpGoogleCalendarRepository)
                     }
                     val vaultFileRepository = remember { VaultFileRepository() }
+                    val diagramRepository = remember(vaultRoot) { DiagramRepository(vaultRoot) }
                     val vaultFileIndex = remember(vaultRoot) { VaultFileIndex(vaultRoot) }
                     val strokeStore = remember { StrokeStore() }
                     val penSettings by penSettingsStore.settings.collectAsState(initial = PenSettings())
@@ -92,6 +94,7 @@ class MainActivity : ComponentActivity() {
                                 CalendarScreen(
                                     viewModel = viewModel,
                                     dailyNoteRepository = dailyNoteRepository,
+                                    diagramRepository = diagramRepository,
                                     strokeStore = strokeStore,
                                     penSettingsStore = penSettingsStore,
                                 )
@@ -111,6 +114,7 @@ class MainActivity : ComponentActivity() {
                             VaultNotesScreen(
                                 fileIndex = vaultFileIndex,
                                 fileRepository = vaultFileRepository,
+                                diagramRepository = diagramRepository,
                                 strokeStore = strokeStore,
                                 penSettings = penSettings,
                                 onBack = { screen = Screen.CALENDAR },

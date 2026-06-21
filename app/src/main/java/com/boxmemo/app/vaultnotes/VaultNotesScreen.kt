@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.boxmemo.app.hwr.HwrEngineType
 import com.boxmemo.app.hwr.formatAsNoteLines
+import com.boxmemo.app.hwr.formatDiagramNoteLine
 import com.boxmemo.app.memo.GuidelineStyle
 import com.boxmemo.app.memo.InkFlushHandle
 import com.boxmemo.app.memo.MemoCanvas
@@ -57,15 +58,21 @@ import com.boxmemo.app.memo.StrokeStore
 import com.boxmemo.app.memo.StrokePath
 import com.boxmemo.app.memo.recognizeStrokes
 import com.boxmemo.app.memo.renderInlineMarkdown
+import com.boxmemo.app.memo.renderStrokesToBitmap
 import com.boxmemo.app.settings.HwrSettingsStore
+import com.boxmemo.app.vault.DiagramRepository
+import com.boxmemo.app.vault.DiagramSaveOutcome
 import com.boxmemo.app.vault.VaultEntry
 import com.boxmemo.app.vault.VaultFileIndex
 import com.boxmemo.app.vault.VaultFileRepository
+import com.boxmemo.app.vault.fileDiagramBaseName
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.LocalDate
+import java.time.LocalTime
 
 /**
  * Standalone screen for adding handwritten notes to any `.md` file in the vault
@@ -78,6 +85,7 @@ import java.io.File
 fun VaultNotesScreen(
     fileIndex: VaultFileIndex,
     fileRepository: VaultFileRepository,
+    diagramRepository: DiagramRepository,
     strokeStore: StrokeStore,
     penSettings: PenSettings,
     onBack: () -> Unit,
@@ -106,6 +114,7 @@ fun VaultNotesScreen(
             VaultFileEditor(
                 file = file,
                 fileRepository = fileRepository,
+                diagramRepository = diagramRepository,
                 strokeStore = strokeStore,
                 penSettings = penSettings,
                 modifier = Modifier.weight(1f),
@@ -383,6 +392,7 @@ private fun RecentRow(label: String, leading: String, onClick: () -> Unit) {
 private fun VaultFileEditor(
     file: File,
     fileRepository: VaultFileRepository,
+    diagramRepository: DiagramRepository,
     strokeStore: StrokeStore,
     penSettings: PenSettings,
     modifier: Modifier = Modifier,
@@ -531,6 +541,51 @@ private fun VaultFileEditor(
                             }
                         },
                         label = { Text("Convert") },
+                    )
+
+                    AssistChip(
+                        // Saves the current ink as a PNG under
+                        // attachments/Diagrams/<year>/W<week> and splices an
+                        // Obsidian ![[…]] image bullet in at the marked line.
+                        // Unlike Convert, the strokes stay on the canvas.
+                        onClick = {
+                            coroutineScope.launch {
+                                val current = flushStrokes()
+                                if (current.isEmpty()) {
+                                    statusMessage = "Nothing to save."
+                                    return@launch
+                                }
+                                statusMessage = "Saving diagram…"
+                                val baseName =
+                                    fileDiagramBaseName(LocalDate.now(), LocalTime.now(), file.name)
+                                val saved = withContext(Dispatchers.IO) {
+                                    val bitmap = renderStrokesToBitmap(current, penSettings)
+                                    diagramRepository.saveDiagram(bitmap, LocalDate.now(), baseName)
+                                }
+                                statusMessage = when (saved) {
+                                    is DiagramSaveOutcome.Saved -> {
+                                        val wrote = withContext(Dispatchers.IO) {
+                                            fileRepository.insertLinesAt(
+                                                file,
+                                                insertIndex,
+                                                listOf(formatDiagramNoteLine(saved.fileName)),
+                                            )
+                                        }
+                                        if (wrote) {
+                                            reloadKey++
+                                            "Diagram saved."
+                                        } else {
+                                            "Diagram saved, but couldn't write to the file."
+                                        }
+                                    }
+                                    DiagramSaveOutcome.VaultNotConfigured ->
+                                        "Couldn't save — no vault is configured."
+                                    DiagramSaveOutcome.WriteFailed ->
+                                        "Couldn't save the diagram."
+                                }
+                            }
+                        },
+                        label = { Text("Save diagram") },
                     )
 
                     AssistChip(
