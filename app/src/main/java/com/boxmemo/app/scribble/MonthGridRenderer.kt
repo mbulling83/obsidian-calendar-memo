@@ -34,7 +34,7 @@ fun drawMonthGrid(
 ) {
     if (width <= 0 || height <= 0) return
 
-    val headerHeight = 36f * density
+    val headerHeight = 44f * density
     val weeks = weekRowsFor(month)
     val cellWidth = width / 7f
     val gridTop = headerHeight
@@ -42,26 +42,27 @@ fun drawMonthGrid(
     val cellHeight = gridHeight / weeks
 
     val linePaint = Paint().apply {
-        color = Color.LTGRAY
-        strokeWidth = 1.5f
+        color = Color.DKGRAY
+        strokeWidth = 2.5f * density
         style = Paint.Style.STROKE
         isAntiAlias = false
     }
     val headerPaint = Paint().apply {
-        color = Color.DKGRAY
-        textSize = 13f * density
+        color = Color.BLACK
+        textSize = 18f * density
         isAntiAlias = true
         textAlign = Paint.Align.CENTER
         isFakeBoldText = true
     }
     val dayPaint = Paint().apply {
-        color = Color.GRAY
-        textSize = 15f * density
+        color = Color.BLACK
+        textSize = 22f * density
         isAntiAlias = true
+        isFakeBoldText = true
     }
     val todayPaint = Paint().apply {
         color = Color.BLACK
-        textSize = 17f * density
+        textSize = 24f * density
         isAntiAlias = true
         isFakeBoldText = true
     }
