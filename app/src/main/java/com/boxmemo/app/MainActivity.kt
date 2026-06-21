@@ -127,7 +127,6 @@ class MainActivity : ComponentActivity() {
                                     onAddMeeting = { startTime, endTime, title ->
                                         viewModel.addMeeting(startTime, endTime, title)
                                     },
-                                    onAddNote = { text -> viewModel.addNote(text) },
                                     onDone = { showAdd = false },
                                 )
                             },
