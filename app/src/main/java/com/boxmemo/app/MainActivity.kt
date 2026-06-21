@@ -23,6 +23,8 @@ import com.boxmemo.app.gcal.NoOpGoogleCalendarRepository
 import com.boxmemo.app.memo.PenSettingsStore
 import com.boxmemo.app.memo.StrokeStore
 import com.boxmemo.app.quickadd.QuickAddForm
+import com.boxmemo.app.scribble.MonthScribbleScreen
+import com.boxmemo.app.scribble.MonthScribbleStore
 import com.boxmemo.app.settings.HwrSettingsStore
 import com.boxmemo.app.settings.SettingsScreen
 import com.boxmemo.app.settings.VaultPermission
@@ -39,7 +41,7 @@ import com.boxmemo.app.vault.VaultSettings
 import com.boxmemo.app.vaultnotes.VaultNotesScreen
 import com.boxmemo.app.widget.AgendaWidgetProvider
 
-private enum class Screen { CALENDAR, SETTINGS, VAULT_NOTES }
+private enum class Screen { CALENDAR, SETTINGS, VAULT_NOTES, MONTH_SCRIBBLE }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,6 +68,9 @@ class MainActivity : ComponentActivity() {
                     val diagramRepository = remember(vaultRoot) { DiagramRepository(vaultRoot) }
                     val vaultFileIndex = remember(vaultRoot) { VaultFileIndex(vaultRoot) }
                     val strokeStore = remember { StrokeStore() }
+                    val monthScribbleStore = remember {
+                        MonthScribbleStore(java.io.File(applicationContext.filesDir, "month-scribbles"))
+                    }
                     val penSettings by penSettingsStore.settings.collectAsState(initial = PenSettings())
 
                     var screen by remember { mutableStateOf(Screen.CALENDAR) }
@@ -90,6 +95,7 @@ class MainActivity : ComponentActivity() {
                                     onAddClick = { showAdd = true },
                                     onTodayClick = { viewModel.selectDate(java.time.LocalDate.now()) },
                                     onVaultNotesClick = { screen = Screen.VAULT_NOTES },
+                                    onMonthScribbleClick = { screen = Screen.MONTH_SCRIBBLE },
                                 )
                                 CalendarScreen(
                                     viewModel = viewModel,
@@ -116,6 +122,13 @@ class MainActivity : ComponentActivity() {
                                 fileRepository = vaultFileRepository,
                                 diagramRepository = diagramRepository,
                                 strokeStore = strokeStore,
+                                penSettings = penSettings,
+                                onBack = { screen = Screen.CALENDAR },
+                            )
+                        }
+                        Screen.MONTH_SCRIBBLE -> {
+                            MonthScribbleScreen(
+                                store = monthScribbleStore,
                                 penSettings = penSettings,
                                 onBack = { screen = Screen.CALENDAR },
                             )

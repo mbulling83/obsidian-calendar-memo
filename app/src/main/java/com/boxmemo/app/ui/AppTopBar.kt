@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Settings
@@ -44,6 +45,7 @@ fun AppTopBar(
     onAddClick: () -> Unit,
     onTodayClick: () -> Unit,
     onVaultNotesClick: () -> Unit,
+    onMonthScribbleClick: () -> Unit,
 ) {
     var now by remember { mutableStateOf(LocalDateTime.now()) }
     LaunchedEffect(Unit) {
@@ -76,6 +78,9 @@ fun AppTopBar(
             }
             IconButton(onClick = onVaultNotesClick) {
                 Icon(Icons.Filled.Edit, contentDescription = "Vault notes")
+            }
+            IconButton(onClick = onMonthScribbleClick) {
+                Icon(Icons.Filled.Create, contentDescription = "Scribble calendar")
             }
             IconButton(onClick = onSettingsClick) {
                 Icon(Icons.Filled.Settings, contentDescription = "Settings")

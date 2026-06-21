@@ -39,6 +39,11 @@ class OnyxInkSurfaceView(
     private var guidelineStyle: GuidelineStyle,
     private val onStrokeFinished: (StrokePath) -> Unit,
     private val onStrokesErased: (List<StrokePath>) -> Unit,
+    // Optional caller-drawn background (e.g. the month-scribble calendar grid),
+    // painted onto the surface's own white buffer under the ink. Drawn here
+    // rather than behind the SurfaceView because the surface is opaque and would
+    // otherwise hide anything composed behind it.
+    private val backgroundRenderer: ((android.graphics.Canvas, Int, Int) -> Unit)? = null,
 ) : SurfaceView(context), SurfaceHolder.Callback {
 
     /** Toggled by MemoCanvas's AndroidView update lambda — no surface recreation. */
@@ -215,6 +220,7 @@ class OnyxInkSurfaceView(
         try {
             canvas.drawColor(Color.WHITE)
             drawGuidelines(canvas)
+            backgroundRenderer?.invoke(canvas, width, height)
             for (stroke in currentStrokes) {
                 if (stroke.size < 2) continue
                 val path = android.graphics.Path()
