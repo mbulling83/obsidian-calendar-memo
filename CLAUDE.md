@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-A Kotlin/Jetpack Compose Android app for Boox e-ink tablets. It displays the user's Obsidian daily note meetings alongside a read-only Google Calendar overlay, provides a low-latency handwriting canvas, and manually converts handwriting to Markdown bullets (via Onyx's built-in MyScript HWR) — writing results back into the daily note file on-device.
+A Kotlin/Jetpack Compose Android app for Boox e-ink tablets. It displays the user's Obsidian daily note meetings alongside a read-only Google Calendar overlay, provides a low-latency handwriting canvas, and manually converts handwriting to Markdown bullets (via Onyx's built-in MyScript HWR) — writing results back into the daily note file on-device. It also includes a standalone scribble calendar — a month grid you handwrite over freely, saved on-device (not in Obsidian).
 
 Target device: Boox U7 (and compatible Onyx Boox hardware running Android 10+, minSdk 29).
 
@@ -35,8 +35,9 @@ Target device: Boox U7 (and compatible Onyx Boox hardware running Android 10+, m
 |---|---|
 | `calendar/` | Month grid + day view UI (`CalendarScreen`, `CalendarView`, `DayView`); `DayViewModel` owns merged Obsidian+GCal state |
 | `vault/` | All file I/O: `DailyNoteRepository` (single read/write owner for the daily note), `VaultFileRepository` + `insertLines` (read/line-splice/write for arbitrary vault files), `DiagramRepository` + `DiagramPaths` (write diagram PNGs to `attachments/Diagrams/<year>/W<week>`; pure naming/folder/collision helpers), `VaultFileIndex` (folder tree + filename search), `VaultSettings` (path resolution), `MeetingSectionParser`, `NotesSectionParser` |
-| `memo/` | Handwriting surface: `OnyxInkSurfaceView` (raw pen input), `MemoCanvas` (Compose wrapper), `StrokeStore`, `ConversionActions` (triggers recognition and writes back), `DiagramSaveAction` + `StrokeRenderer` (export strokes to a PNG and insert an Obsidian `![[…]]` image bullet), `recognizeStrokes` (shared Onyx/ML Kit recognition helper), `renderInlineMarkdown` |
+| `memo/` | Handwriting surface: `OnyxInkSurfaceView` (raw pen input; optional `backgroundRenderer` to paint under the ink on the surface's own buffer), `MemoCanvas` (Compose wrapper), `StrokeStore`, `ConversionActions` (triggers recognition and writes back), `DiagramSaveAction` + `StrokeRenderer` (export strokes to a PNG and insert an Obsidian `![[…]]` image bullet), `recognizeStrokes` (shared Onyx/ML Kit recognition helper), `renderInlineMarkdown` |
 | `vaultnotes/` | `VaultNotesScreen`: pick any `.md` file (tree or filename search), then handwrite and convert bullets — or save the canvas as a diagram PNG — spliced into the file at a tapped line. Reuses `MemoCanvas` + `recognizeStrokes`; writes via `VaultFileRepository` / `DiagramRepository` |
+| `scribble/` | Standalone scribble calendar (not Obsidian-linked): `MonthScribbleScreen` (single freeform ink layer over a month grid), `MonthScribbleStore` (per-month on-device ink persistence in `filesDir/month-scribbles/`; pure-text serialize/deserialize + `scaleStrokes`), `MonthGridRenderer` (`drawMonthGrid` paints the grid into the ink surface via `MemoCanvas`'s `backgroundRenderer`; `weekRowsFor` row math) |
 | `hwr/` | Recognition: `OnyxHWREngine` (AIDL to firmware MyScript service), `BulletFormatter` |
 | `gcal/` | `GoogleCalendarRepository` interface + `NoOpGoogleCalendarRepository` (GCal OAuth deferred) |
 | `quickadd/` | Quick-add form composables for adding meetings/notes via text |
@@ -55,6 +56,8 @@ Target device: Boox U7 (and compatible Onyx Boox hardware running Android 10+, m
 
 **`OnyxInkSurfaceView`** uses Onyx Pen SDK `TouchHelper` / raw-drawing mode: the e-ink controller renders ink at hardware latency, bypassing Compose's recomposition pipeline. Strokes are received *after* completion for persistence. Erasing: hardware (stylus side button → `onRawErasingTouchPointListReceived`) and UI eraser chip both remove strokes and trigger a full canvas redraw (Onyx firmware handles raw drawing visually but not erasing).
 
+**Scribble calendar** (`scribble/`) is deliberately *not* linked to Obsidian: it's a month grid you handwrite over like a paper wall planner, with one freeform ink layer spanning all cells. The grid is drawn into the ink surface's own white buffer (via `MemoCanvas`'s `backgroundRenderer`), not as a Compose layer behind it — the `OnyxInkSurfaceView` is opaque and would hide anything composed behind it. Ink persists per month under `filesDir/month-scribbles/<YearMonth>.ink` (write-then-replace), serialized as a compact pure-text format (not `org.json`, so the round-trip is JVM-testable). Strokes record the canvas size they were drawn at and rescale on load (`scaleStrokes`). It opens on the current month and navigates to any past/future month.
+
 **Handwriting → text recognition** goes entirely through the Onyx built-in MyScript engine (`OnyxHWREngine`). There are no cloud/AI recognition paths — the app makes no network calls.
 
 **Handwriting → diagram** is the alternative to recognition: `StrokeRenderer.renderStrokesToBitmap()` rasterises the strokes (cropped to the ink bounds, white background, no guidelines) to a PNG, which `DiagramRepository` saves under `attachments/Diagrams/<week-based-year>/W<week>/` (write-then-replace, like the note repos). The note then gets an Obsidian `![[filename.png]]` embed bullet — a meeting detail line under a meeting, or a plain bullet for the Notes section / a Vault Notes file. Filenames are date + time + meeting/note name (see `DiagramPaths`), sanitized and collision-suffixed. Saving does **not** clear the canvas.
@@ -69,7 +72,7 @@ GCal OAuth is **deferred** — `NoOpGoogleCalendarRepository` is wired in `MainA
 
 ### Tests
 
-JVM unit tests (no Android runtime needed) cover parsers, formatters, `StrokeStore`, `EraseHitTest`, `DailyNoteRepository`, and `DiagramPaths` (naming/folder/collision rules). The bitmap render (`StrokeRenderer`) and image I/O (`DiagramRepository`) are thin Android-dependent glue, exercised manually on device.
+JVM unit tests (no Android runtime needed) cover parsers, formatters, `StrokeStore`, `EraseHitTest`, `DailyNoteRepository`, `DiagramPaths` (naming/folder/collision rules), `MonthScribbleStore` (serialization round-trip, month isolation, atomic replace, `scaleStrokes`), and `weekRowsFor` (grid row math). The bitmap render (`StrokeRenderer`), image I/O (`DiagramRepository`), and the grid paint (`drawMonthGrid`) are thin Android-dependent glue, exercised manually on device.
 
 ## Daily Note Format Reference
 
