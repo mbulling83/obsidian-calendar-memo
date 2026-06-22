@@ -14,19 +14,18 @@ private val QUICK_DURATIONS_MINUTES = listOf(15L, 30L, 45L, 60L)
 
 /**
  * End time entry as quick duration offsets from the start time (15/30/45/60
- * minutes), with a full time picker as a fallback for anything else.
+ * minutes), with the same inline stepper as [TimeField] for anything else.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EndTimeField(startTime: LocalTime?, endTime: LocalTime?, onEndTimeSelected: (LocalTime) -> Unit) {
-    Column {
+fun EndTimeField(startTime: LocalTime, endTime: LocalTime, onEndTimeSelected: (LocalTime) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             QUICK_DURATIONS_MINUTES.forEach { minutes ->
-                val candidate = startTime?.plusMinutes(minutes)
+                val candidate = startTime.plusMinutes(minutes)
                 FilterChip(
-                    selected = candidate != null && candidate == endTime,
-                    onClick = { startTime?.let { onEndTimeSelected(it.plusMinutes(minutes)) } },
-                    enabled = startTime != null,
+                    selected = candidate == endTime,
+                    onClick = { onEndTimeSelected(startTime.plusMinutes(minutes)) },
                     label = { Text("${minutes}m") },
                 )
             }

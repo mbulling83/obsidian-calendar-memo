@@ -1,10 +1,14 @@
 package com.boxmemo.app.quickadd
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,35 +23,52 @@ import java.time.format.DateTimeFormatter
 
 private val HHMM = DateTimeFormatter.ofPattern("HH:mm")
 
+/** Round [time] up to the next 15-minute mark so the steppers start on the grid. */
+private fun roundUpTo15(time: LocalTime): LocalTime {
+    val truncated = time.withSecond(0).withNano(0).withMinute((time.minute / 15) * 15)
+    return if (truncated == time.withSecond(0).withNano(0)) truncated else truncated.plusMinutes(15)
+}
+
 /**
- * Quick-add form for new meetings (R5). Time is entered via a
- * Material3 time picker dialog (not handwriting, not free-text HH:MM
- * typing) — avoids both OCR errors and clunky manual digit entry corrupting
- * the structured time field the daily note's parser depends on.
+ * Quick-add form for new meetings (R5). Times are entered via inline +/-
+ * steppers (hours by 1, minutes by 15) — no nested dialog, no clock dial,
+ * no free-text HH:MM typing — which avoids OCR errors, keyboard fiddliness
+ * on e-ink, and corrupting the structured time the daily note parser depends on.
  */
 @Composable
 fun QuickAddForm(
     onAddMeeting: (startTime: String, endTime: String, title: String) -> Unit,
     onDone: () -> Unit = {},
 ) {
-    var startTime by remember { mutableStateOf<LocalTime?>(null) }
-    var endTime by remember { mutableStateOf<LocalTime?>(null) }
+    val initialStart = remember { roundUpTo15(LocalTime.now()) }
+    var startTime by remember { mutableStateOf(initialStart) }
+    var endTime by remember { mutableStateOf(initialStart.plusMinutes(30)) }
     var title by remember { mutableStateOf("") }
 
-    Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("New meeting")
-        TimeField(label = "Start", time = startTime, onTimeSelected = { startTime = it })
-        EndTimeField(startTime = startTime, endTime = endTime, onEndTimeSelected = { endTime = it })
-        OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title") })
-        Button(
-            enabled = startTime != null && endTime != null && title.isNotBlank(),
-            onClick = {
-                onAddMeeting(startTime!!.format(HHMM), endTime!!.format(HHMM), title)
-                startTime = null
-                endTime = null
-                title = ""
-                onDone()
-            },
-        ) { Text("Add meeting") }
+    OutlinedCard(border = BorderStroke(2.dp, MaterialTheme.colorScheme.outline)) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(text = "New Meeting", style = MaterialTheme.typography.titleLarge)
+            HorizontalDivider()
+            TimeField(label = "Start", time = startTime, onTimeSelected = { startTime = it })
+            EndTimeField(startTime = startTime, endTime = endTime, onEndTimeSelected = { endTime = it })
+            OutlinedTextField(
+                value = title,
+                onValueChange = { title = it },
+                label = { Text("Title") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                enabled = title.isNotBlank() && endTime.isAfter(startTime),
+                onClick = {
+                    onAddMeeting(startTime.format(HHMM), endTime.format(HHMM), title)
+                    title = ""
+                    onDone()
+                },
+            ) { Text("Add meeting") }
+        }
     }
 }

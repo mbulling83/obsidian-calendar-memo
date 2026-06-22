@@ -151,6 +151,29 @@ class OnyxInkSurfaceView(
         touchHelper = null
     }
 
+    /**
+     * Suspends pen capture while another window holds focus.
+     *
+     * A Compose dialog (e.g. the Quick-Add meeting form) opens in its *own*
+     * window, stealing focus from the Activity window this surface lives in.
+     * Onyx raw drawing bypasses the normal view hierarchy and keeps capturing
+     * the pen even while the dialog sits on top — so taps meant for the dialog's
+     * buttons landed as ink on the canvas underneath instead. Disabling raw
+     * drawing on focus loss hands input back to the dialog; we redraw our strokes
+     * onto the normal buffer (revealed when the firmware's raw layer goes away)
+     * so nothing flickers, and re-enable capture once focus returns.
+     */
+    override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
+        super.onWindowFocusChanged(hasWindowFocus)
+        val helper = touchHelper ?: return
+        if (hasWindowFocus) {
+            helper.setRawDrawingEnabled(true)
+        } else {
+            helper.setRawDrawingEnabled(false)
+            redrawExistingStrokes(holder)
+        }
+    }
+
     private val guidelinePaint = Paint().apply {
         color = Color.GRAY
         strokeWidth = 2.5f

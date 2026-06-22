@@ -1,52 +1,65 @@
 package com.boxmemo.app.quickadd
 
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import java.time.LocalTime
 
 /**
- * A tappable field that opens a Material3 time picker dialog, replacing
- * free-text HH:MM entry — typing hours/minutes by hand was clunky on the
- * Boox touch keyboard.
+ * Inline time entry built from +/- steppers: hours step by 1 and minutes by 15.
+ *
+ * Replaces the Material3 clock-dial dialog, which (a) opened as a nested
+ * AlertDialog inside the Quick-Add dialog — an unreliable combination that
+ * often did nothing on tap — and (b) was fiddly to operate via a fine dial on
+ * e-ink. Steppers are large, unambiguous tap targets that snap minutes to a
+ * 15-minute grid, matching the durations offered by [EndTimeField].
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TimeField(label: String, time: LocalTime?, onTimeSelected: (LocalTime) -> Unit) {
-    var showDialog by remember { mutableStateOf(false) }
-
-    OutlinedButton(onClick = { showDialog = true }) {
-        Text(text = "$label: ${time?.toString() ?: "Tap to set"}")
+fun TimeField(label: String, time: LocalTime, onTimeSelected: (LocalTime) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(text = label, style = MaterialTheme.typography.labelLarge)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Stepper(
+                value = "%02d".format(time.hour),
+                onDecrement = { onTimeSelected(time.minusHours(1)) },
+                onIncrement = { onTimeSelected(time.plusHours(1)) },
+            )
+            Text(text = ":", style = MaterialTheme.typography.headlineSmall)
+            Stepper(
+                value = "%02d".format(time.minute),
+                onDecrement = { onTimeSelected(time.minusMinutes(15)) },
+                onIncrement = { onTimeSelected(time.plusMinutes(15)) },
+            )
+        }
     }
+}
 
-    if (showDialog) {
-        val initial = time ?: LocalTime.now()
-        val pickerState = rememberTimePickerState(
-            initialHour = initial.hour,
-            initialMinute = initial.minute,
-            is24Hour = true,
+@Composable
+private fun Stepper(value: String, onDecrement: () -> Unit, onIncrement: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        OutlinedButton(onClick = onDecrement) { Text(text = "−", style = MaterialTheme.typography.titleLarge) }
+        Text(
+            text = value,
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.widthIn(min = 44.dp).padding(horizontal = 4.dp),
         )
-        AlertDialog(
-            onDismissRequest = { showDialog = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    onTimeSelected(LocalTime.of(pickerState.hour, pickerState.minute))
-                    showDialog = false
-                }) { Text("OK") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDialog = false }) { Text("Cancel") }
-            },
-            text = { TimePicker(state = pickerState) },
-        )
+        OutlinedButton(onClick = onIncrement) { Text(text = "+", style = MaterialTheme.typography.titleLarge) }
     }
 }
