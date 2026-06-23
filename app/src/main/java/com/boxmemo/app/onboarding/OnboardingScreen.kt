@@ -59,6 +59,20 @@ fun OnboardingScreen(
     val step = steps[stepIndex]
     val scope = rememberCoroutineScope()
 
+    // Vault input is hoisted here (not held inside the step) so the path is
+    // persisted the moment it's valid — on folder pick and when advancing —
+    // rather than only on an explicit Save the user can skip past.
+    val savedVaultRoot by vaultSettingsStore.vaultRoot.collectAsState(initial = null)
+    var vaultInput by remember(savedVaultRoot) { mutableStateOf(savedVaultRoot.orEmpty()) }
+
+    /** Persists [path] if it's a real directory; returns whether it was saved. */
+    fun saveVaultIfValid(path: String): Boolean {
+        val trimmed = path.trim()
+        val valid = trimmed.isNotEmpty() && File(trimmed).isDirectory
+        if (valid) scope.launch { vaultSettingsStore.setVaultRoot(trimmed) }
+        return valid
+    }
+
     val finish: () -> Unit = {
         scope.launch { onboardingStore.setOnboardingComplete(true) }
         onFinish()
@@ -86,7 +100,11 @@ fun OnboardingScreen(
                     onRequestAllFilesAccess = onRequestAllFilesAccess,
                     hasAllFilesAccess = hasAllFilesAccess,
                 )
-                OnboardingStep.VAULT -> VaultStep(vaultSettingsStore)
+                OnboardingStep.VAULT -> VaultStep(
+                    vaultInput = vaultInput,
+                    onVaultInputChange = { vaultInput = it },
+                    saveVaultIfValid = { saveVaultIfValid(it) },
+                )
                 OnboardingStep.FEATURES -> FeaturesStep()
                 OnboardingStep.DONE -> DoneStep()
             }
@@ -110,7 +128,14 @@ fun OnboardingScreen(
             if (step == OnboardingStep.DONE) {
                 Button(onClick = finish) { Text("Get started") }
             } else {
-                Button(onClick = { stepIndex++ }) { Text("Next") }
+                Button(
+                    onClick = {
+                        // Don't lose a browsed/typed vault path just because the
+                        // user advanced without tapping Save.
+                        if (step == OnboardingStep.VAULT) saveVaultIfValid(vaultInput)
+                        stepIndex++
+                    },
+                ) { Text("Next") }
             }
         }
     }
@@ -177,19 +202,32 @@ private fun PermissionStep(
 }
 
 @Composable
-private fun VaultStep(vaultSettingsStore: VaultSettingsStore) {
-    val savedVaultRoot by vaultSettingsStore.vaultRoot.collectAsState(initial = null)
-    var vaultRootInput by remember(savedVaultRoot) { mutableStateOf(savedVaultRoot.orEmpty()) }
-    var savedMessage by remember { mutableStateOf<String?>(null) }
-    val scope = rememberCoroutineScope()
+private fun VaultStep(
+    vaultInput: String,
+    onVaultInputChange: (String) -> Unit,
+    saveVaultIfValid: (String) -> Boolean,
+) {
+    // Status shown after an explicit action (pick/Save) — not while typing.
+    var statusMessage by remember { mutableStateOf<String?>(null) }
+
+    fun saveAndReport(path: String) {
+        statusMessage = if (saveVaultIfValid(path)) {
+            "✓ Saved. The calendar will read from this vault."
+        } else if (path.isBlank()) {
+            "Enter or browse to a folder first."
+        } else {
+            "Couldn't find that folder. Check file access is granted and the path is correct."
+        }
+    }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
     ) { treeUri ->
         if (treeUri != null) {
             resolveAbsolutePathFromTreeUri(treeUri)?.let { resolved ->
-                vaultRootInput = resolved
-                savedMessage = null
+                onVaultInputChange(resolved)
+                // Auto-save on pick so the path can't be lost by skipping Save.
+                saveAndReport(resolved)
             }
         }
     }
@@ -201,35 +239,22 @@ private fun VaultStep(vaultSettingsStore: VaultSettingsStore) {
             "you know it.",
     )
     OutlinedTextField(
-        value = vaultRootInput,
+        value = vaultInput,
         onValueChange = {
-            vaultRootInput = it
-            savedMessage = null
+            onVaultInputChange(it)
+            statusMessage = null
         },
         modifier = Modifier.fillMaxWidth(),
-        placeholder = { Text("/storage/emulated/0/MyVault") },
+        placeholder = { Text("/storage/emulated/0/Documents/MyVault") },
         singleLine = true,
         label = { Text("Vault folder path") },
     )
     Spacer(Modifier.height(12.dp))
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedButton(onClick = { folderPickerLauncher.launch(null) }) { Text("Browse") }
-        Button(
-            onClick = {
-                val trimmed = vaultRootInput.trim()
-                savedMessage = when {
-                    trimmed.isEmpty() -> "Enter or browse to a folder first."
-                    !File(trimmed).isDirectory ->
-                        "Couldn't find that folder. Check file access is granted and the path is correct."
-                    else -> {
-                        scope.launch { vaultSettingsStore.setVaultRoot(trimmed) }
-                        "✓ Saved. The calendar will read from this vault."
-                    }
-                }
-            },
-        ) { Text("Save") }
+        Button(onClick = { saveAndReport(vaultInput) }) { Text("Save") }
     }
-    savedMessage?.let {
+    statusMessage?.let {
         Spacer(Modifier.height(12.dp))
         Text(it, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     }

@@ -166,7 +166,7 @@ private fun VaultSection(
             value = vaultRootInput,
             onValueChange = { vaultRootInput = it },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("/storage/emulated/0/lepus albus") },
+            placeholder = { Text("/storage/emulated/0/Documents/MyVault") },
             singleLine = true,
         )
         OutlinedButton(onClick = { folderPickerLauncher.launch(null) }) { Text("Browse for folder") }
