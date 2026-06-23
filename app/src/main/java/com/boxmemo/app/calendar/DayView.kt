@@ -57,13 +57,14 @@ fun DayEventList(
     date: LocalDate,
     events: List<DayEvent>,
     meetingsSectionMissing: Boolean,
+    meetingsHeading: String = com.boxmemo.app.vault.VaultSettings.DEFAULT_MEETINGS_HEADING,
     selectedScope: CaptureScope = CaptureScope.Notes,
     onScopeSelected: (CaptureScope) -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
         Text(text = date.format(AGENDA_DATE_FORMAT), style = MaterialTheme.typography.titleMedium)
         if (meetingsSectionMissing) {
-            Text("This day's note has no \"# 👥 Meetings\" section yet.")
+            Text("This day's note has no \"$meetingsHeading\" section yet.")
         }
         if (events.isEmpty() && !meetingsSectionMissing) {
             Text("No events today", style = MaterialTheme.typography.bodySmall)

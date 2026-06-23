@@ -37,6 +37,10 @@ sealed interface NoteWriteOutcome {
  */
 class DailyNoteRepository(private val vaultSettings: VaultSettings) {
 
+    /** The configured section headings, exposed so the UI can name them in messages. */
+    val meetingsHeading: String get() = vaultSettings.meetingsHeading
+    val notesHeading: String get() = vaultSettings.notesHeading
+
     fun readNote(date: LocalDate): DailyNoteReadResult {
         val path = vaultSettings.resolveDailyNotePath(date)
             ?: return DailyNoteReadResult.VaultNotConfigured
@@ -47,13 +51,13 @@ class DailyNoteRepository(private val vaultSettings: VaultSettings) {
     fun readMeetings(date: LocalDate): MeetingSectionParseResult? {
         val read = readNote(date)
         val content = (read as? DailyNoteReadResult.Found)?.content ?: return null
-        return parseMeetingsSection(content)
+        return parseMeetingsSection(content, vaultSettings.meetingsHeading)
     }
 
-    /** Reads the existing bullet lines under the `# 📝 Notes` section (empty if none/unreadable). */
+    /** Reads the existing bullet lines under the Notes section (empty if none/unreadable). */
     fun readNotes(date: LocalDate): List<String> {
         val content = (readNote(date) as? DailyNoteReadResult.Found)?.content ?: return emptyList()
-        return parseNotesSection(content)
+        return parseNotesSection(content, vaultSettings.notesHeading)
     }
 
     /**
@@ -75,7 +79,7 @@ class DailyNoteRepository(private val vaultSettings: VaultSettings) {
      * note was missing, lacked a `# 👥 Meetings` section, or was written.
      */
     fun addMeeting(date: LocalDate, entry: MeetingEntry): NoteWriteOutcome = withNoteContent(date) { content ->
-        when (val result = insertMeeting(content, entry)) {
+        when (val result = insertMeeting(content, entry, vaultSettings.meetingsHeading)) {
             is MeetingWriteResult.Updated -> writeOutcome(date, result.content)
             // insertMeeting only ever yields Updated or SectionNotFound.
             else -> NoteWriteOutcome.SectionMissing
@@ -84,7 +88,7 @@ class DailyNoteRepository(private val vaultSettings: VaultSettings) {
 
     /** Adds a new plain note bullet via the quick-add form (R5/R6). */
     fun addNote(date: LocalDate, text: String): NoteWriteOutcome = withNoteContent(date) { content ->
-        when (val result = appendNoteBullet(content, text)) {
+        when (val result = appendNoteBullet(content, text, vaultSettings.notesHeading)) {
             is NoteWriteResult.Updated -> writeOutcome(date, result.content)
             NoteWriteResult.SectionNotFound -> NoteWriteOutcome.SectionMissing
         }
@@ -106,7 +110,10 @@ class DailyNoteRepository(private val vaultSettings: VaultSettings) {
         title: String,
         bulletLines: List<String>,
     ): NoteWriteOutcome = withNoteContent(date) { content ->
-        when (val result = insertMeetingDetailBullets(content, startTime, endTime, title, bulletLines)) {
+        when (
+            val result =
+                insertMeetingDetailBullets(content, startTime, endTime, title, bulletLines, vaultSettings.meetingsHeading)
+        ) {
             is MeetingWriteResult.Updated -> writeOutcome(date, result.content)
             MeetingWriteResult.SectionNotFound -> NoteWriteOutcome.SectionMissing
             MeetingWriteResult.MeetingNotFound -> NoteWriteOutcome.MeetingNotFound
@@ -116,7 +123,7 @@ class DailyNoteRepository(private val vaultSettings: VaultSettings) {
 
     /** Writes converted handwriting bullets under the page-level Notes section (R10). */
     fun addNoteLines(date: LocalDate, lines: List<String>): NoteWriteOutcome = withNoteContent(date) { content ->
-        when (val result = appendNoteLines(content, lines)) {
+        when (val result = appendNoteLines(content, lines, vaultSettings.notesHeading)) {
             is NoteWriteResult.Updated -> writeOutcome(date, result.content)
             NoteWriteResult.SectionNotFound -> NoteWriteOutcome.SectionMissing
         }

@@ -22,10 +22,12 @@ import com.boxmemo.app.calendar.DayViewModel
 import com.boxmemo.app.gcal.NoOpGoogleCalendarRepository
 import com.boxmemo.app.memo.PenSettingsStore
 import com.boxmemo.app.memo.StrokeStore
+import com.boxmemo.app.onboarding.OnboardingScreen
 import com.boxmemo.app.quickadd.QuickAddForm
 import com.boxmemo.app.scribble.MonthScribbleScreen
 import com.boxmemo.app.scribble.MonthScribbleStore
 import com.boxmemo.app.settings.HwrSettingsStore
+import com.boxmemo.app.settings.OnboardingSettingsStore
 import com.boxmemo.app.settings.SettingsScreen
 import com.boxmemo.app.settings.VaultPermission
 import com.boxmemo.app.settings.VaultSettingsStore
@@ -50,16 +52,21 @@ class MainActivity : ComponentActivity() {
         val store = VaultSettingsStore(applicationContext)
         val penSettingsStore = PenSettingsStore(applicationContext)
         val hwrSettingsStore = HwrSettingsStore(applicationContext)
+        val onboardingStore = OnboardingSettingsStore(applicationContext)
 
         setContent {
             MaterialTheme(typography = BoxMemoTypography) {
                 Surface {
                     val vaultRoot by store.vaultRoot.collectAsState(initial = null)
+                    val meetingsHeading by store.meetingsHeading
+                        .collectAsState(initial = VaultSettings.DEFAULT_MEETINGS_HEADING)
+                    val notesHeading by store.notesHeading
+                        .collectAsState(initial = VaultSettings.DEFAULT_NOTES_HEADING)
                     // U3 (Google Calendar) is deferred; the no-op repository
                     // keeps the merged day view working with Obsidian-only
                     // data until OAuth is wired in.
-                    val dailyNoteRepository = remember(vaultRoot) {
-                        DailyNoteRepository(VaultSettings(vaultRoot))
+                    val dailyNoteRepository = remember(vaultRoot, meetingsHeading, notesHeading) {
+                        DailyNoteRepository(VaultSettings(vaultRoot, meetingsHeading = meetingsHeading, notesHeading = notesHeading))
                     }
                     val viewModel = remember(dailyNoteRepository) {
                         DayViewModel(dailyNoteRepository, NoOpGoogleCalendarRepository)
@@ -76,6 +83,15 @@ class MainActivity : ComponentActivity() {
                     var screen by remember { mutableStateOf(Screen.CALENDAR) }
                     var showAdd by remember { mutableStateOf(false) }
 
+                    // First-run welcome tour: shown once for a new user (e.g. a
+                    // friend who just installed the app), and re-openable from
+                    // Settings. null = still loading the flag; don't flash the
+                    // tour before we know whether it's been completed.
+                    val onboardingComplete by onboardingStore.onboardingComplete
+                        .collectAsState(initial = null)
+                    var forceOnboarding by remember { mutableStateOf(false) }
+                    val showOnboarding = forceOnboarding || onboardingComplete == false
+
                     // Surface quick-add warnings (e.g. the day's note doesn't
                     // exist yet) rather than letting the add fail silently.
                     val context = LocalContext.current
@@ -87,6 +103,22 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    if (onboardingComplete == null) {
+                        // Still loading the onboarding flag — render nothing
+                        // this frame to avoid flashing the tour, then the real
+                        // value resolves and routes correctly.
+                    } else if (showOnboarding) {
+                        OnboardingScreen(
+                            onboardingStore = onboardingStore,
+                            vaultSettingsStore = store,
+                            onRequestAllFilesAccess = { launchAllFilesAccessSettings(this@MainActivity) },
+                            hasAllFilesAccess = { VaultPermission.hasAllFilesAccess() },
+                            onFinish = {
+                                forceOnboarding = false
+                                screen = Screen.CALENDAR
+                            },
+                        )
+                    } else {
                     when (screen) {
                         Screen.CALENDAR -> {
                             Column(modifier = Modifier.fillMaxSize()) {
@@ -114,6 +146,7 @@ class MainActivity : ComponentActivity() {
                                 onBack = { screen = Screen.CALENDAR },
                                 onRequestAllFilesAccess = { launchAllFilesAccessSettings(this@MainActivity) },
                                 hasAllFilesAccess = { VaultPermission.hasAllFilesAccess() },
+                                onShowOnboarding = { forceOnboarding = true },
                             )
                         }
                         Screen.VAULT_NOTES -> {
@@ -148,6 +181,7 @@ class MainActivity : ComponentActivity() {
                                 )
                             },
                         )
+                    }
                     }
                 }
             }

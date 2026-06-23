@@ -6,7 +6,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -37,6 +39,7 @@ import com.boxmemo.app.hwr.HwrEngineType
 import com.boxmemo.app.hwr.MlKitHWREngine
 import com.boxmemo.app.memo.PenSettingsStore
 import com.boxmemo.app.memo.PenType
+import com.boxmemo.app.vault.VaultSettings
 import kotlinx.coroutines.launch
 
 /**
@@ -51,6 +54,7 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onRequestAllFilesAccess: () -> Unit,
     hasAllFilesAccess: () -> Boolean,
+    onShowOnboarding: () -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
@@ -73,7 +77,21 @@ fun SettingsScreen(
             PenSection(penSettingsStore)
             HorizontalDivider()
             HwrSection(hwrSettingsStore)
+            HorizontalDivider()
+            HelpSection(onShowOnboarding)
         }
+    }
+}
+
+@Composable
+private fun HelpSection(onShowOnboarding: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Help", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Replay the welcome tour — a refresher on setup and the app's features.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        OutlinedButton(onClick = onShowOnboarding) { Text("Show welcome tour") }
     }
 }
 
@@ -156,6 +174,67 @@ private fun VaultSection(
 
         Text(if (hasAllFilesAccess()) "All-files access granted" else "All-files access not granted")
         Button(onClick = onRequestAllFilesAccess) { Text("Grant all-files access") }
+    }
+
+    Spacer(Modifier.height(8.dp))
+    SectionHeadingsSection(store)
+}
+
+/**
+ * Lets the user name the daily-note sections that hold their meetings and
+ * notes. Matching is forgiving — heading level (`#` vs `##`), surrounding
+ * whitespace, and case are all ignored — so the exact text here just needs to
+ * carry the same words (and any emoji) as the heading in their note.
+ */
+@Composable
+private fun SectionHeadingsSection(store: VaultSettingsStore) {
+    val savedMeetings by store.meetingsHeading.collectAsState(initial = VaultSettings.DEFAULT_MEETINGS_HEADING)
+    val savedNotes by store.notesHeading.collectAsState(initial = VaultSettings.DEFAULT_NOTES_HEADING)
+    var meetingsInput by remember(savedMeetings) { mutableStateOf(savedMeetings) }
+    var notesInput by remember(savedNotes) { mutableStateOf(savedNotes) }
+    var savedMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Daily-note sections", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Which heading in your daily note holds meetings, and which holds notes. " +
+                "The number of #'s, spacing, and capitalisation don't matter — just match the words " +
+                "(and any emoji) you use.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        OutlinedTextField(
+            value = meetingsInput,
+            onValueChange = { meetingsInput = it; savedMessage = null },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Meetings heading") },
+            placeholder = { Text(VaultSettings.DEFAULT_MEETINGS_HEADING) },
+            singleLine = true,
+        )
+        OutlinedTextField(
+            value = notesInput,
+            onValueChange = { notesInput = it; savedMessage = null },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Notes heading") },
+            placeholder = { Text(VaultSettings.DEFAULT_NOTES_HEADING) },
+            singleLine = true,
+        )
+        Button(
+            onClick = {
+                val meetings = meetingsInput.trim()
+                val notes = notesInput.trim()
+                savedMessage = if (meetings.isBlank() || notes.isBlank()) {
+                    "Both headings need some text."
+                } else {
+                    scope.launch {
+                        store.setMeetingsHeading(meetings)
+                        store.setNotesHeading(notes)
+                    }
+                    "✓ Saved."
+                }
+            },
+        ) { Text("Save section headings") }
+        savedMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
 }
 

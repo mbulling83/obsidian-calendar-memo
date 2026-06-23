@@ -19,6 +19,7 @@ data class DayUiState(
     val events: List<DayEvent> = emptyList(),
     val noteLines: List<String> = emptyList(),
     val meetingsSectionMissing: Boolean = false,
+    val meetingsHeading: String = com.boxmemo.app.vault.VaultSettings.DEFAULT_MEETINGS_HEADING,
     val isLoading: Boolean = false,
 )
 
@@ -49,7 +50,7 @@ class DayViewModel(
     }
 
     fun selectDate(date: LocalDate) {
-        _uiState.value = DayUiState(date = date, isLoading = true)
+        _uiState.value = DayUiState(date = date, meetingsHeading = dailyNoteRepository.meetingsHeading, isLoading = true)
         viewModelScope.launch(Dispatchers.IO) {
             val meetingsResult = dailyNoteRepository.readMeetings(date)
             val meetings = (meetingsResult as? MeetingSectionParseResult.Found)?.entries.orEmpty()
@@ -61,6 +62,7 @@ class DayViewModel(
                 events = mergeDayEvents(meetings, googleEvents),
                 noteLines = noteLines,
                 meetingsSectionMissing = meetingsResult == MeetingSectionParseResult.SectionNotFound,
+                meetingsHeading = dailyNoteRepository.meetingsHeading,
                 isLoading = false,
             )
         }
@@ -73,7 +75,7 @@ class DayViewModel(
                 uiState.value.date,
                 MeetingEntry(startTime, endTime, title, emptyList()),
             )
-            _message.value = quickAddMessage(outcome, "meeting", "# 👥 Meetings")
+            _message.value = quickAddMessage(outcome, "meeting", dailyNoteRepository.meetingsHeading)
             selectDate(uiState.value.date)
         }
     }
@@ -82,7 +84,7 @@ class DayViewModel(
     fun addNote(text: String) {
         viewModelScope.launch(Dispatchers.IO) {
             val outcome = dailyNoteRepository.addNote(uiState.value.date, text)
-            _message.value = quickAddMessage(outcome, "note", "# 📝 Notes")
+            _message.value = quickAddMessage(outcome, "note", dailyNoteRepository.notesHeading)
             selectDate(uiState.value.date)
         }
     }

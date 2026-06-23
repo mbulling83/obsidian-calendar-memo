@@ -64,7 +64,7 @@ Target device: Boox U7 (and compatible Onyx Boox hardware running Android 10+, m
 
 **Daily note path** follows the user's Periodic Notes convention: `Periodic Notes/Daily Notes/{year}/{MM - Month}/{yyyy-MM-dd}.md` — see `VaultSettings.DEFAULT_TEMPLATE`.
 
-**Daily note section format**: meetings live under `# 👥 Meetings` as `HH:MM - HH:MM: Title` lines; notes live under `# 📝 Notes` as `- bullet` lines. The section-aware parsers in `vault/` operate only within the target section's line range — they never touch Dataview/DataviewJS blocks elsewhere in the file.
+**Daily note section format**: meetings live under `# 👥 Meetings` as `HH:MM - HH:MM: Title` lines; notes live under `# 📝 Notes` as `- bullet` lines. The two section headings are **user-configurable** (`VaultSettingsStore` → `VaultSettings.meetingsHeading`/`notesHeading`, defaulting to the emoji headings) and matched forgivingly via `vault/SectionHeading` — heading level (`#` vs `##`), surrounding whitespace, and case are all ignored, so a friend's `## Meetings` still resolves a configured `Meetings`. The section-aware parsers in `vault/` take the configured heading and operate only within that section's line range (heading → next ATX heading or `---`) — they never touch Dataview/DataviewJS blocks elsewhere in the file.
 
 ### Google Calendar
 

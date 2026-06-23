@@ -114,6 +114,45 @@ class MeetingSectionParserTest {
     }
 
     @Test
+    fun `parses a custom meetings heading, forgiving of hash level and case`() {
+        val content = """
+            ## calendar
+            - 09:00 - 09:30: Standup
+            ---
+            # Notes
+        """.trimIndent()
+
+        val result = parseMeetingsSection(content, heading = "Calendar") as MeetingSectionParseResult.Found
+
+        assertEquals(1, result.entries.size)
+        assertEquals("Standup", result.entries.single().title)
+    }
+
+    @Test
+    fun `inserts a meeting under a custom heading`() {
+        val content = """
+            # Agenda
+            - 09:00 - 09:30: Standup
+        """.trimIndent()
+
+        val result = insertMeeting(
+            content,
+            MeetingEntry("11:00", "11:30", "Review", emptyList()),
+            heading = "# Agenda",
+        )
+
+        assertTrue(result is MeetingWriteResult.Updated)
+        assertTrue((result as MeetingWriteResult.Updated).content.contains("- 11:00 - 11:30: Review"))
+    }
+
+    @Test
+    fun `default heading still resolves the emoji section`() {
+        // Regression: callers that don't pass a heading get the author's default.
+        val result = parseMeetingsSection(realDailyNote) as MeetingSectionParseResult.Found
+        assertEquals(1, result.entries.size)
+    }
+
+    @Test
     fun `parsing does not include content from Notes, Memos, or dataview sections`() {
         val result = parseMeetingsSection(realDailyNote) as MeetingSectionParseResult.Found
 

@@ -15,6 +15,10 @@ import java.util.Locale
 class VaultSettings(
     private val vaultRoot: String?,
     private val dailyNoteSubpathTemplate: String = DEFAULT_TEMPLATE,
+    /** Configured meetings-section heading; matched forgivingly (see [SectionHeading]). */
+    val meetingsHeading: String = DEFAULT_MEETINGS_HEADING,
+    /** Configured notes-section heading; matched forgivingly (see [SectionHeading]). */
+    val notesHeading: String = DEFAULT_NOTES_HEADING,
 ) {
 
     /**
@@ -43,5 +47,9 @@ class VaultSettings(
          */
         const val DEFAULT_TEMPLATE =
             "Periodic Notes/Daily Notes/{year}/{monthFolder}/{isoDate}.md"
+
+        /** Default daily-note section headings (the author's own convention). */
+        const val DEFAULT_MEETINGS_HEADING = "# 👥 Meetings"
+        const val DEFAULT_NOTES_HEADING = "# 📝 Notes"
     }
 }

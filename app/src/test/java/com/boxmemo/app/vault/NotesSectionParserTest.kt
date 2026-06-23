@@ -22,6 +22,21 @@ class NotesSectionParserTest {
     }
 
     @Test
+    fun `appends and reads a custom notes heading, forgiving of hash level and case`() {
+        val content = """
+            # Meetings
+            - 09:00 - 09:30: Standup
+            ---
+            ## journal
+        """.trimIndent()
+
+        val appended = appendNoteBullet(content, "scratch", heading = "Journal") as NoteWriteResult.Updated
+        val read = parseNotesSection(appended.content, heading = "# journal")
+
+        assertEquals(listOf("- scratch"), read)
+    }
+
+    @Test
     fun `appends after existing notes without disturbing them`() {
         val content = """
             # 📝 Notes

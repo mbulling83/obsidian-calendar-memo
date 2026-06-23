@@ -1,6 +1,5 @@
 package com.boxmemo.app.vault
 
-private const val MEETINGS_HEADING = "# 👥 Meetings"
 private val MEETING_LINE = Regex("""^- (\d{2}:\d{2}) - (\d{2}:\d{2}): (.+)$""")
 private val DETAIL_LINE = Regex("""^[\t ]+- """)
 
@@ -29,15 +28,15 @@ sealed interface MeetingWriteResult {
 
 private data class SectionBounds(val headingIndex: Int, val sectionEnd: Int)
 
-/** Locates the `# 👥 Meetings` heading and the exclusive end of its section, or null if absent. */
-private fun findMeetingsSectionBounds(lines: List<String>): SectionBounds? {
-    val headingIndex = lines.indexOfFirst { it.trim() == MEETINGS_HEADING }
+/** Locates the meetings [heading] and the exclusive end of its section, or null if absent. */
+private fun findMeetingsSectionBounds(lines: List<String>, heading: String): SectionBounds? {
+    val headingIndex = lines.indexOfFirst { SectionHeading.matches(it, heading) }
     if (headingIndex == -1) return null
 
     val sectionEnd = lines
         .withIndex()
         .drop(headingIndex + 1)
-        .firstOrNull { (_, line) -> line.trim() == "---" || line.trim().startsWith("# ") }
+        .firstOrNull { (_, line) -> SectionHeading.isSectionBoundary(line) }
         ?.index
         ?: lines.size
 
@@ -51,9 +50,12 @@ private fun findMeetingsSectionBounds(lines: List<String>): SectionBounds? {
  * subsequent indented bullet lines (tab or space indented) belong to that
  * meeting as detail lines, until the next meeting line or the section end.
  */
-fun parseMeetingsSection(noteContent: String): MeetingSectionParseResult {
+fun parseMeetingsSection(
+    noteContent: String,
+    heading: String = VaultSettings.DEFAULT_MEETINGS_HEADING,
+): MeetingSectionParseResult {
     val lines = noteContent.lines()
-    val bounds = findMeetingsSectionBounds(lines)
+    val bounds = findMeetingsSectionBounds(lines, heading)
         ?: return MeetingSectionParseResult.SectionNotFound
     val (headingIndex, sectionEnd) = bounds
 
@@ -100,9 +102,13 @@ private fun formatMeetingLine(entry: MeetingEntry): String =
  * never merged into it. New entries carry no detail bullets (R5/R6 — quick-add
  * is form-only).
  */
-fun insertMeeting(noteContent: String, newEntry: MeetingEntry): MeetingWriteResult {
+fun insertMeeting(
+    noteContent: String,
+    newEntry: MeetingEntry,
+    heading: String = VaultSettings.DEFAULT_MEETINGS_HEADING,
+): MeetingWriteResult {
     val lines = noteContent.lines().toMutableList()
-    val bounds = findMeetingsSectionBounds(lines) ?: return MeetingWriteResult.SectionNotFound
+    val bounds = findMeetingsSectionBounds(lines, heading) ?: return MeetingWriteResult.SectionNotFound
     val (headingIndex, sectionEnd) = bounds
 
     // Anchor = (absolute line index of a meeting line, its startTime).
@@ -147,9 +153,10 @@ fun insertMeetingDetailBullets(
     endTime: String,
     title: String,
     bulletLines: List<String>,
+    heading: String = VaultSettings.DEFAULT_MEETINGS_HEADING,
 ): MeetingWriteResult {
     val lines = noteContent.lines().toMutableList()
-    val bounds = findMeetingsSectionBounds(lines) ?: return MeetingWriteResult.SectionNotFound
+    val bounds = findMeetingsSectionBounds(lines, heading) ?: return MeetingWriteResult.SectionNotFound
     val (headingIndex, sectionEnd) = bounds
 
     val anchors = (headingIndex + 1 until sectionEnd)

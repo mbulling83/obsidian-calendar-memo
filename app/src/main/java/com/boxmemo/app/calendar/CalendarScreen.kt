@@ -73,6 +73,7 @@ fun CalendarScreen(
                     date = uiState.date,
                     events = uiState.events,
                     meetingsSectionMissing = uiState.meetingsSectionMissing,
+                    meetingsHeading = uiState.meetingsHeading,
                     selectedScope = selectedScope,
                     onScopeSelected = { selectedScope = it },
                 )
