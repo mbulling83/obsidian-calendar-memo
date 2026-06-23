@@ -8,3 +8,8 @@ captures/
 .externalNativeBuild/
 .cxx/
 *.apk
+# Release signing — never commit
+keystore.properties
+keystore/
+*.jks
+*.keystore
