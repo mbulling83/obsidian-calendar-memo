@@ -157,7 +157,7 @@ private fun StepBody(text: String) {
 
 @Composable
 private fun WelcomeStep() {
-    StepHeading("Welcome to Calendar Memo")
+    StepHeading("Welcome to The Daily")
     StepBody(
         "A handwriting-first companion for your Obsidian daily notes — built for " +
             "this e-ink tablet and its pen.",
