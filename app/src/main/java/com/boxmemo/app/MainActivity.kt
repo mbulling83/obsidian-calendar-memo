@@ -14,9 +14,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import com.boxmemo.app.calendar.CalendarScreen
 import com.boxmemo.app.calendar.DayViewModel
 import com.boxmemo.app.gcal.NoOpGoogleCalendarRepository
@@ -37,13 +41,17 @@ import com.boxmemo.app.ui.BoxMemoTypography
 import com.boxmemo.app.memo.PenSettings
 import com.boxmemo.app.vault.DailyNoteRepository
 import com.boxmemo.app.vault.DiagramRepository
+import com.boxmemo.app.vault.VaultDiagnosis
 import com.boxmemo.app.vault.VaultFileIndex
 import com.boxmemo.app.vault.VaultFileRepository
+import com.boxmemo.app.vault.VaultScanner
 import com.boxmemo.app.vault.VaultSettings
+import com.boxmemo.app.vaultcheck.VaultCheckScreen
+import com.boxmemo.app.vaultcheck.VaultHealthBanner
 import com.boxmemo.app.vaultnotes.VaultNotesScreen
 import com.boxmemo.app.widget.AgendaWidgetProvider
 
-private enum class Screen { CALENDAR, SETTINGS, VAULT_NOTES, MONTH_SCRIBBLE }
+private enum class Screen { CALENDAR, SETTINGS, VAULT_NOTES, MONTH_SCRIBBLE, VAULT_CHECK }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,15 +66,37 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(typography = BoxMemoTypography) {
                 Surface {
                     val vaultRoot by store.vaultRoot.collectAsState(initial = null)
+                    val dailyNoteTemplate by store.dailyNoteTemplate
+                        .collectAsState(initial = VaultSettings.DEFAULT_TEMPLATE)
                     val meetingsHeading by store.meetingsHeading
                         .collectAsState(initial = VaultSettings.DEFAULT_MEETINGS_HEADING)
                     val notesHeading by store.notesHeading
                         .collectAsState(initial = VaultSettings.DEFAULT_NOTES_HEADING)
+                    val vaultSettings = remember(vaultRoot, dailyNoteTemplate, meetingsHeading, notesHeading) {
+                        VaultSettings(vaultRoot, dailyNoteTemplate, meetingsHeading, notesHeading)
+                    }
                     // U3 (Google Calendar) is deferred; the no-op repository
                     // keeps the merged day view working with Obsidian-only
                     // data until OAuth is wired in.
-                    val dailyNoteRepository = remember(vaultRoot, meetingsHeading, notesHeading) {
-                        DailyNoteRepository(VaultSettings(vaultRoot, meetingsHeading = meetingsHeading, notesHeading = notesHeading))
+                    val dailyNoteRepository = remember(vaultSettings) {
+                        DailyNoteRepository(vaultSettings)
+                    }
+
+                    // Vault health: scan recent notes off the main thread whenever
+                    // the vault config changes, so the Calendar can warn when no
+                    // meetings can be read (wrong folder / heading) instead of
+                    // just showing empty days.
+                    val scanScope = rememberCoroutineScope()
+                    var vaultDiagnosis by remember { mutableStateOf<VaultDiagnosis?>(null) }
+                    var bannerDismissed by remember(vaultSettings) { mutableStateOf(false) }
+                    val rescan: () -> Unit = {
+                        scanScope.launch {
+                            val result = withContext(Dispatchers.IO) { VaultScanner(vaultSettings).scan() }
+                            vaultDiagnosis = result
+                        }
+                    }
+                    LaunchedEffect(vaultSettings) {
+                        vaultDiagnosis = withContext(Dispatchers.IO) { VaultScanner(vaultSettings).scan() }
                     }
                     val viewModel = remember(dailyNoteRepository) {
                         DayViewModel(dailyNoteRepository, NoOpGoogleCalendarRepository)
@@ -129,6 +159,13 @@ class MainActivity : ComponentActivity() {
                                     onVaultNotesClick = { screen = Screen.VAULT_NOTES },
                                     onMonthScribbleClick = { screen = Screen.MONTH_SCRIBBLE },
                                 )
+                                if (!bannerDismissed) {
+                                    VaultHealthBanner(
+                                        diagnosis = vaultDiagnosis,
+                                        onDiagnose = { screen = Screen.VAULT_CHECK },
+                                        onDismiss = { bannerDismissed = true },
+                                    )
+                                }
                                 CalendarScreen(
                                     viewModel = viewModel,
                                     dailyNoteRepository = dailyNoteRepository,
@@ -147,6 +184,18 @@ class MainActivity : ComponentActivity() {
                                 onRequestAllFilesAccess = { launchAllFilesAccessSettings(this@MainActivity) },
                                 hasAllFilesAccess = { VaultPermission.hasAllFilesAccess() },
                                 onShowOnboarding = { forceOnboarding = true },
+                                onCheckVault = { screen = Screen.VAULT_CHECK },
+                            )
+                        }
+                        Screen.VAULT_CHECK -> {
+                            VaultCheckScreen(
+                                diagnosis = vaultDiagnosis,
+                                onApplyMeetingsHeading = { scanScope.launch { store.setMeetingsHeading(it) } },
+                                onApplyNotesHeading = { scanScope.launch { store.setNotesHeading(it) } },
+                                onApplyTemplate = { scanScope.launch { store.setDailyNoteTemplate(it) } },
+                                onApplyVaultRoot = { scanScope.launch { store.setVaultRoot(it) } },
+                                onRescan = rescan,
+                                onBack = { screen = Screen.CALENDAR },
                             )
                         }
                         Screen.VAULT_NOTES -> {

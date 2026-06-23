@@ -34,14 +34,16 @@ Target device: Boox U7 (and compatible Onyx Boox hardware running Android 10+, m
 | Package | Responsibility |
 |---|---|
 | `calendar/` | Month grid + day view UI (`CalendarScreen`, `CalendarView`, `DayView`); `DayViewModel` owns merged Obsidian+GCal state |
-| `vault/` | All file I/O: `DailyNoteRepository` (single read/write owner for the daily note), `VaultFileRepository` + `insertLines` (read/line-splice/write for arbitrary vault files), `DiagramRepository` + `DiagramPaths` (write diagram PNGs to `attachments/Diagrams/<year>/W<week>`; pure naming/folder/collision helpers), `VaultFileIndex` (folder tree + filename search), `VaultSettings` (path resolution), `MeetingSectionParser`, `NotesSectionParser` |
+| `vault/` | All file I/O: `DailyNoteRepository` (single read/write owner for the daily note), `VaultFileRepository` + `insertLines` (read/line-splice/write for arbitrary vault files), `DiagramRepository` + `DiagramPaths` (write diagram PNGs to `attachments/Diagrams/<year>/W<week>`; pure naming/folder/collision helpers), `VaultFileIndex` (folder tree + filename search), `VaultSettings` (path resolution + configurable folder template/headings), `MeetingSectionParser`, `NotesSectionParser`, `SectionHeading` (forgiving heading matching), `VaultDiagnostics` (pure analysis of sampled notes → `VaultDiagnosis`) + `VaultScanner` (Android: samples recent notes / walks the tree) |
 | `memo/` | Handwriting surface: `OnyxInkSurfaceView` (raw pen input; optional `backgroundRenderer` to paint under the ink on the surface's own buffer), `MemoCanvas` (Compose wrapper), `StrokeStore`, `ConversionActions` (triggers recognition and writes back), `DiagramSaveAction` + `StrokeRenderer` (export strokes to a PNG and insert an Obsidian `![[…]]` image bullet), `recognizeStrokes` (shared Onyx/ML Kit recognition helper), `renderInlineMarkdown` |
 | `vaultnotes/` | `VaultNotesScreen`: pick any `.md` file (tree or filename search), then handwrite and convert bullets — or save the canvas as a diagram PNG — spliced into the file at a tapped line. Reuses `MemoCanvas` + `recognizeStrokes`; writes via `VaultFileRepository` / `DiagramRepository` |
 | `scribble/` | Standalone scribble calendar (not Obsidian-linked): `MonthScribbleScreen` (single freeform ink layer over a month grid), `MonthScribbleStore` (per-month on-device ink persistence in `filesDir/month-scribbles/`; pure-text serialize/deserialize + `scaleStrokes`), `MonthGridRenderer` (`drawMonthGrid` paints the grid into the ink surface via `MemoCanvas`'s `backgroundRenderer`; `weekRowsFor` row math) |
 | `hwr/` | Recognition: `OnyxHWREngine` (AIDL to firmware MyScript service), `BulletFormatter` |
 | `gcal/` | `GoogleCalendarRepository` interface + `NoOpGoogleCalendarRepository` (GCal OAuth deferred) |
 | `quickadd/` | Quick-add form composables for adding meetings/notes via text |
-| `settings/` | `SettingsScreen`, `VaultSettingsStore` (DataStore), `PenSettingsStore` (DataStore), vault permission helpers |
+| `settings/` | `SettingsScreen`, `VaultSettingsStore` (DataStore: vault root, folder template, section headings), `PenSettingsStore`/`HwrSettingsStore`/`OnboardingSettingsStore` (DataStore), vault permission helpers |
+| `onboarding/` | `OnboardingScreen`: first-run welcome tour (file access → vault path → feature highlights), shown once and re-openable from Settings |
+| `vaultcheck/` | `VaultCheckScreen` (diagnosis + one-tap fixes) and `VaultHealthBanner` (Calendar warning when no meetings can be read) — driven by `vault/VaultScanner` |
 | `ui/` | Shared `AppTopBar`, typography |
 
 ### Key architectural decisions
@@ -62,7 +64,9 @@ Target device: Boox U7 (and compatible Onyx Boox hardware running Android 10+, m
 
 **Handwriting → diagram** is the alternative to recognition: `StrokeRenderer.renderStrokesToBitmap()` rasterises the strokes (cropped to the ink bounds, white background, no guidelines) to a PNG, which `DiagramRepository` saves under `attachments/Diagrams/<week-based-year>/W<week>/` (write-then-replace, like the note repos). The note then gets an Obsidian `![[filename.png]]` embed bullet — a meeting detail line under a meeting, or a plain bullet for the Notes section / a Vault Notes file. Filenames are date + time + meeting/note name (see `DiagramPaths`), sanitized and collision-suffixed. Saving does **not** clear the canvas.
 
-**Daily note path** follows the user's Periodic Notes convention: `Periodic Notes/Daily Notes/{year}/{MM - Month}/{yyyy-MM-dd}.md` — see `VaultSettings.DEFAULT_TEMPLATE`.
+**Daily note path** defaults to the user's Periodic Notes convention: `Periodic Notes/Daily Notes/{year}/{MM - Month}/{yyyy-MM-dd}.md` — see `VaultSettings.DEFAULT_TEMPLATE` — but the template is **user-configurable** (Settings → Daily note folder structure; persisted in `VaultSettingsStore`) with `{year}`/`{monthFolder}`/`{isoDate}` tokens, so friends whose notes live elsewhere are supported.
+
+**Vault health diagnostics**: `VaultScanner` samples the most recent resolved daily notes (looking back up to 120 days) and runs the pure `VaultDiagnostics.analyzeSamples` to produce a `VaultDiagnosis`: `Healthy`, `HeadingMismatch` (notes resolve but the configured meetings heading isn't present — recommends the heading where `HH:MM - HH:MM:` lines actually live), or `NoNotesFound` (nothing resolved — walks the vault for a date-named `.md` and recommends a corrected folder template via `inferTemplate`). The Calendar shows `VaultHealthBanner` for problem diagnoses; `VaultCheckScreen` (also from Settings) applies fixes with one tap. The scan runs off the main thread on vault-config change.
 
 **Daily note section format**: meetings live under `# 👥 Meetings` as `HH:MM - HH:MM: Title` lines; notes live under `# 📝 Notes` as `- bullet` lines. The two section headings are **user-configurable** (`VaultSettingsStore` → `VaultSettings.meetingsHeading`/`notesHeading`, defaulting to the emoji headings) and matched forgivingly via `vault/SectionHeading` — heading level (`#` vs `##`), surrounding whitespace, and case are all ignored, so a friend's `## Meetings` still resolves a configured `Meetings`. The section-aware parsers in `vault/` take the configured heading and operate only within that section's line range (heading → next ATX heading or `---`) — they never touch Dataview/DataviewJS blocks elsewhere in the file.
 
@@ -72,7 +76,7 @@ GCal OAuth is **deferred** — `NoOpGoogleCalendarRepository` is wired in `MainA
 
 ### Tests
 
-JVM unit tests (no Android runtime needed) cover parsers, formatters, `StrokeStore`, `EraseHitTest`, `DailyNoteRepository`, `DiagramPaths` (naming/folder/collision rules), `MonthScribbleStore` (serialization round-trip, month isolation, atomic replace, `scaleStrokes`), and `weekRowsFor` (grid row math). The bitmap render (`StrokeRenderer`), image I/O (`DiagramRepository`), and the grid paint (`drawMonthGrid`) are thin Android-dependent glue, exercised manually on device.
+JVM unit tests (no Android runtime needed) cover parsers, formatters, `StrokeStore`, `EraseHitTest`, `DailyNoteRepository`, `DiagramPaths` (naming/folder/collision rules), `MonthScribbleStore` (serialization round-trip, month isolation, atomic replace, `scaleStrokes`), `weekRowsFor` (grid row math), `SectionHeading` (forgiving matching), and `VaultDiagnostics` (heading/template detection). The bitmap render (`StrokeRenderer`), image I/O (`DiagramRepository`), the grid paint (`drawMonthGrid`), and the `VaultScanner` filesystem walk are thin Android-dependent glue, exercised manually on device.
 
 ## Daily Note Format Reference
 

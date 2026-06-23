@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.map
 
 private val Context.vaultDataStore by preferencesDataStore(name = "vault_settings")
 private val VAULT_ROOT_KEY = stringPreferencesKey("vault_root")
+private val DAILY_NOTE_TEMPLATE_KEY = stringPreferencesKey("daily_note_template")
 private val MEETINGS_HEADING_KEY = stringPreferencesKey("meetings_heading")
 private val NOTES_HEADING_KEY = stringPreferencesKey("notes_heading")
 
@@ -24,6 +25,9 @@ class VaultSettingsStore(private val context: Context) {
     val vaultRoot: Flow<String?> =
         context.vaultDataStore.data.map { it[VAULT_ROOT_KEY] }
 
+    val dailyNoteTemplate: Flow<String> =
+        context.vaultDataStore.data.map { it[DAILY_NOTE_TEMPLATE_KEY] ?: VaultSettings.DEFAULT_TEMPLATE }
+
     val meetingsHeading: Flow<String> =
         context.vaultDataStore.data.map { it[MEETINGS_HEADING_KEY] ?: VaultSettings.DEFAULT_MEETINGS_HEADING }
 
@@ -32,6 +36,10 @@ class VaultSettingsStore(private val context: Context) {
 
     suspend fun setVaultRoot(path: String) {
         context.vaultDataStore.edit { it[VAULT_ROOT_KEY] = path }
+    }
+
+    suspend fun setDailyNoteTemplate(template: String) {
+        context.vaultDataStore.edit { it[DAILY_NOTE_TEMPLATE_KEY] = template }
     }
 
     suspend fun setMeetingsHeading(heading: String) {

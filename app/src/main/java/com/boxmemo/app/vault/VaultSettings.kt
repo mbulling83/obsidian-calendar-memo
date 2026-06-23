@@ -13,8 +13,9 @@ import java.util.Locale
  * confirmed-working pattern from jdkruzr/aragonite (see plan U1).
  */
 class VaultSettings(
-    private val vaultRoot: String?,
-    private val dailyNoteSubpathTemplate: String = DEFAULT_TEMPLATE,
+    val vaultRoot: String?,
+    /** Daily-note subpath template with {year}/{monthFolder}/{isoDate} tokens. */
+    val dailyNoteSubpathTemplate: String = DEFAULT_TEMPLATE,
     /** Configured meetings-section heading; matched forgivingly (see [SectionHeading]). */
     val meetingsHeading: String = DEFAULT_MEETINGS_HEADING,
     /** Configured notes-section heading; matched forgivingly (see [SectionHeading]). */
@@ -32,15 +33,20 @@ class VaultSettings(
     }
 
     private fun renderTemplate(template: String, date: LocalDate): String {
-        val monthName = date.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)
-        val monthFolder = "%02d - %s".format(date.monthValue, monthName)
         return template
             .replace("{year}", date.year.toString())
-            .replace("{monthFolder}", monthFolder)
+            .replace("{monthFolder}", monthFolderFor(date))
             .replace("{isoDate}", date.toString())
     }
 
     companion object {
+
+        /** The `{monthFolder}` token's value for [date], e.g. "06 - June". */
+        fun monthFolderFor(date: LocalDate): String {
+            val monthName = date.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)
+            return "%02d - %s".format(date.monthValue, monthName)
+        }
+
         /**
          * Matches the user's confirmed Periodic Notes convention:
          * Periodic Notes/Daily Notes/YYYY/MM - Month/YYYY-MM-DD.md

@@ -55,6 +55,7 @@ fun SettingsScreen(
     onRequestAllFilesAccess: () -> Unit,
     hasAllFilesAccess: () -> Boolean,
     onShowOnboarding: () -> Unit = {},
+    onCheckVault: () -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(8.dp)) {
@@ -72,7 +73,7 @@ fun SettingsScreen(
                 .padding(24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            VaultSection(store, onRequestAllFilesAccess, hasAllFilesAccess)
+            VaultSection(store, onRequestAllFilesAccess, hasAllFilesAccess, onCheckVault)
             HorizontalDivider()
             PenSection(penSettingsStore)
             HorizontalDivider()
@@ -147,6 +148,7 @@ private fun VaultSection(
     store: VaultSettingsStore,
     onRequestAllFilesAccess: () -> Unit,
     hasAllFilesAccess: () -> Boolean,
+    onCheckVault: () -> Unit,
 ) {
     val savedVaultRoot by store.vaultRoot.collectAsState(initial = null)
     var vaultRootInput by remember(savedVaultRoot) { mutableStateOf(savedVaultRoot.orEmpty()) }
@@ -174,10 +176,66 @@ private fun VaultSection(
 
         Text(if (hasAllFilesAccess()) "All-files access granted" else "All-files access not granted")
         Button(onClick = onRequestAllFilesAccess) { Text("Grant all-files access") }
+
+        OutlinedButton(onClick = onCheckVault) { Text("Check vault setup") }
     }
 
     Spacer(Modifier.height(8.dp))
+    DailyNoteStructureSection(store)
+    Spacer(Modifier.height(8.dp))
     SectionHeadingsSection(store)
+}
+
+/**
+ * Lets the user set the daily-note folder template. The tokens {year},
+ * {monthFolder} and {isoDate} are substituted per date — e.g.
+ * "Periodic Notes/Daily Notes/2026/06 - June/2026-06-23.md".
+ */
+@Composable
+private fun DailyNoteStructureSection(store: VaultSettingsStore) {
+    val savedTemplate by store.dailyNoteTemplate.collectAsState(initial = VaultSettings.DEFAULT_TEMPLATE)
+    var templateInput by remember(savedTemplate) { mutableStateOf(savedTemplate) }
+    var savedMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Daily note folder structure", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Where your daily notes live, relative to the vault root. Use {year}, " +
+                "{monthFolder} (e.g. \"06 - June\") and {isoDate} (e.g. \"2026-06-23\") as tokens. " +
+                "Not sure? Use \"Check vault setup\" above to detect it.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        OutlinedTextField(
+            value = templateInput,
+            onValueChange = { templateInput = it; savedMessage = null },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Folder template") },
+            placeholder = { Text(VaultSettings.DEFAULT_TEMPLATE) },
+            singleLine = true,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(
+                onClick = {
+                    val trimmed = templateInput.trim()
+                    savedMessage = if (!trimmed.contains("{isoDate}")) {
+                        "The template must include {isoDate} so each day maps to its own file."
+                    } else {
+                        scope.launch { store.setDailyNoteTemplate(trimmed) }
+                        "✓ Saved."
+                    }
+                },
+            ) { Text("Save folder template") }
+            OutlinedButton(
+                onClick = {
+                    templateInput = VaultSettings.DEFAULT_TEMPLATE
+                    scope.launch { store.setDailyNoteTemplate(VaultSettings.DEFAULT_TEMPLATE) }
+                    savedMessage = "✓ Reset to default."
+                },
+            ) { Text("Reset") }
+        }
+        savedMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    }
 }
 
 /**
