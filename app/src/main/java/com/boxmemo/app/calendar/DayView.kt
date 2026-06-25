@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -58,11 +59,22 @@ fun DayEventList(
     events: List<DayEvent>,
     meetingsSectionMissing: Boolean,
     meetingsHeading: String = com.boxmemo.app.vault.VaultSettings.DEFAULT_MEETINGS_HEADING,
+    noteExists: Boolean = true,
+    onCreateNote: () -> Unit = {},
     selectedScope: CaptureScope = CaptureScope.Notes,
     onScopeSelected: (CaptureScope) -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(8.dp)) {
         Text(text = date.format(AGENDA_DATE_FORMAT), style = MaterialTheme.typography.titleMedium)
+        if (!noteExists) {
+            Text(
+                "No note exists for this day yet.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            OutlinedButton(onClick = onCreateNote, modifier = Modifier.padding(vertical = 4.dp)) {
+                Text("Create note")
+            }
+        }
         if (meetingsSectionMissing) {
             Text("This day's note has no \"$meetingsHeading\" section yet.")
         }

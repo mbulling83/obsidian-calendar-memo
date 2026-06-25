@@ -68,12 +68,22 @@ class MainActivity : ComponentActivity() {
                     val vaultRoot by store.vaultRoot.collectAsState(initial = null)
                     val dailyNoteTemplate by store.dailyNoteTemplate
                         .collectAsState(initial = VaultSettings.DEFAULT_TEMPLATE)
+                    val dailyNoteTemplatePath by store.dailyNoteTemplatePath
+                        .collectAsState(initial = null)
                     val meetingsHeading by store.meetingsHeading
                         .collectAsState(initial = VaultSettings.DEFAULT_MEETINGS_HEADING)
                     val notesHeading by store.notesHeading
                         .collectAsState(initial = VaultSettings.DEFAULT_NOTES_HEADING)
-                    val vaultSettings = remember(vaultRoot, dailyNoteTemplate, meetingsHeading, notesHeading) {
-                        VaultSettings(vaultRoot, dailyNoteTemplate, meetingsHeading, notesHeading)
+                    val vaultSettings = remember(
+                        vaultRoot, dailyNoteTemplate, meetingsHeading, notesHeading, dailyNoteTemplatePath,
+                    ) {
+                        VaultSettings(
+                            vaultRoot = vaultRoot,
+                            dailyNoteSubpathTemplate = dailyNoteTemplate,
+                            meetingsHeading = meetingsHeading,
+                            notesHeading = notesHeading,
+                            dailyNoteTemplatePath = dailyNoteTemplatePath,
+                        )
                     }
                     // U3 (Google Calendar) is deferred; the no-op repository
                     // keeps the merged day view working with Obsidian-only

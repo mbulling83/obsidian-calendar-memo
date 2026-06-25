@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.map
 private val Context.vaultDataStore by preferencesDataStore(name = "vault_settings")
 private val VAULT_ROOT_KEY = stringPreferencesKey("vault_root")
 private val DAILY_NOTE_TEMPLATE_KEY = stringPreferencesKey("daily_note_template")
+private val DAILY_NOTE_TEMPLATE_PATH_KEY = stringPreferencesKey("daily_note_template_path")
 private val MEETINGS_HEADING_KEY = stringPreferencesKey("meetings_heading")
 private val NOTES_HEADING_KEY = stringPreferencesKey("notes_heading")
 
@@ -28,6 +29,14 @@ class VaultSettingsStore(private val context: Context) {
     val dailyNoteTemplate: Flow<String> =
         context.vaultDataStore.data.map { it[DAILY_NOTE_TEMPLATE_KEY] ?: VaultSettings.DEFAULT_TEMPLATE }
 
+    /**
+     * Path to the Templater template used to fill a newly-created daily note,
+     * relative to the vault root (or absolute). Null until the user picks one —
+     * note creation then falls back to a minimal heading scaffold.
+     */
+    val dailyNoteTemplatePath: Flow<String?> =
+        context.vaultDataStore.data.map { it[DAILY_NOTE_TEMPLATE_PATH_KEY] }
+
     val meetingsHeading: Flow<String> =
         context.vaultDataStore.data.map { it[MEETINGS_HEADING_KEY] ?: VaultSettings.DEFAULT_MEETINGS_HEADING }
 
@@ -40,6 +49,14 @@ class VaultSettingsStore(private val context: Context) {
 
     suspend fun setDailyNoteTemplate(template: String) {
         context.vaultDataStore.edit { it[DAILY_NOTE_TEMPLATE_KEY] = template }
+    }
+
+    /** Sets the daily-note template path, or clears it when [path] is blank. */
+    suspend fun setDailyNoteTemplatePath(path: String) {
+        context.vaultDataStore.edit {
+            val trimmed = path.trim()
+            if (trimmed.isEmpty()) it.remove(DAILY_NOTE_TEMPLATE_PATH_KEY) else it[DAILY_NOTE_TEMPLATE_PATH_KEY] = trimmed
+        }
     }
 
     suspend fun setMeetingsHeading(heading: String) {

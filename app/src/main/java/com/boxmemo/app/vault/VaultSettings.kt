@@ -20,6 +20,13 @@ class VaultSettings(
     val meetingsHeading: String = DEFAULT_MEETINGS_HEADING,
     /** Configured notes-section heading; matched forgivingly (see [SectionHeading]). */
     val notesHeading: String = DEFAULT_NOTES_HEADING,
+    /**
+     * Path to the Templater template used when the app creates a missing daily
+     * note — relative to [vaultRoot] (e.g. "Templates/Daily Note.md") or
+     * absolute. Null/blank means "no template": new notes get a minimal
+     * [defaultNoteScaffold] of the configured section headings instead.
+     */
+    val dailyNoteTemplatePath: String? = null,
 ) {
 
     /**
@@ -31,6 +38,26 @@ class VaultSettings(
         val subpath = renderTemplate(dailyNoteSubpathTemplate, date)
         return File(root, subpath)
     }
+
+    /**
+     * Resolves the configured daily-note template file, or null if none is set.
+     * A relative path is resolved against [vaultRoot]; an absolute path is used
+     * as-is so a template stored outside the vault still works.
+     */
+    fun resolveTemplateFile(): File? {
+        val path = dailyNoteTemplatePath?.takeIf { it.isNotBlank() } ?: return null
+        val file = File(path)
+        if (file.isAbsolute) return file
+        val root = vaultRoot?.takeIf { it.isNotBlank() } ?: return null
+        return File(root, path)
+    }
+
+    /**
+     * The fallback body for a new daily note when no template is configured (or
+     * the template can't be read): just the two configured section headings, so
+     * the parsers and quick-add have somewhere to write.
+     */
+    fun defaultNoteScaffold(): String = "$meetingsHeading\n\n$notesHeading\n"
 
     private fun renderTemplate(template: String, date: LocalDate): String {
         return template

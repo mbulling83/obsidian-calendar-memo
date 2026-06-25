@@ -3,9 +3,11 @@ package com.boxmemo.app.calendar
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.boxmemo.app.gcal.GoogleCalendarRepository
+import com.boxmemo.app.vault.DailyNoteReadResult
 import com.boxmemo.app.vault.DailyNoteRepository
 import com.boxmemo.app.vault.MeetingEntry
 import com.boxmemo.app.vault.MeetingSectionParseResult
+import com.boxmemo.app.vault.NoteCreateOutcome
 import com.boxmemo.app.vault.NoteWriteOutcome
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +22,8 @@ data class DayUiState(
     val noteLines: List<String> = emptyList(),
     val meetingsSectionMissing: Boolean = false,
     val meetingsHeading: String = com.boxmemo.app.vault.VaultSettings.DEFAULT_MEETINGS_HEADING,
+    /** False when the day's note file doesn't exist yet, so the UI can offer to create it. */
+    val noteExists: Boolean = true,
     val isLoading: Boolean = false,
 )
 
@@ -52,6 +56,7 @@ class DayViewModel(
     fun selectDate(date: LocalDate) {
         _uiState.value = DayUiState(date = date, meetingsHeading = dailyNoteRepository.meetingsHeading, isLoading = true)
         viewModelScope.launch(Dispatchers.IO) {
+            val noteExists = dailyNoteRepository.readNote(date) is DailyNoteReadResult.Found
             val meetingsResult = dailyNoteRepository.readMeetings(date)
             val meetings = (meetingsResult as? MeetingSectionParseResult.Found)?.entries.orEmpty()
             val noteLines = dailyNoteRepository.readNotes(date)
@@ -63,8 +68,29 @@ class DayViewModel(
                 noteLines = noteLines,
                 meetingsSectionMissing = meetingsResult == MeetingSectionParseResult.SectionNotFound,
                 meetingsHeading = dailyNoteRepository.meetingsHeading,
+                noteExists = noteExists,
                 isLoading = false,
             )
+        }
+    }
+
+    /**
+     * Creates the selected day's note from the configured Templater template
+     * (R: friends using Templater can stamp their own template into a fresh
+     * note), then refreshes so the new note's sections appear.
+     */
+    fun createDailyNote() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _message.value = when (val outcome = dailyNoteRepository.createNote(uiState.value.date)) {
+                is NoteCreateOutcome.Created ->
+                    if (outcome.usedTemplate) "Created today's note from your template." else "Created today's note."
+                NoteCreateOutcome.AlreadyExists -> null
+                NoteCreateOutcome.VaultNotConfigured ->
+                    "No vault is configured yet — set one in Settings first."
+                NoteCreateOutcome.WriteFailed ->
+                    "Couldn't create the note — check the vault path and all-files access."
+            }
+            selectDate(uiState.value.date)
         }
     }
 

@@ -29,3 +29,25 @@ fun resolveAbsolutePathFromTreeUri(treeUri: Uri): String? {
 
     return if (relativePath.isBlank()) volumeRoot else "$volumeRoot/$relativePath"
 }
+
+/**
+ * Converts a document URI returned by ACTION_OPEN_DOCUMENT (a single picked
+ * file) into an absolute filesystem path, so a chosen Templater template file
+ * can be read directly via File I/O. Same caveats as
+ * [resolveAbsolutePathFromTreeUri]: reliable on the primary volume, best-effort
+ * elsewhere.
+ */
+fun resolveAbsolutePathFromDocumentUri(documentUri: Uri): String? {
+    val documentId = runCatching { DocumentsContract.getDocumentId(documentUri) }.getOrNull() ?: return null
+    val parts = documentId.split(":", limit = 2)
+    if (parts.size != 2) return null
+    val (volumeId, relativePath) = parts
+
+    val volumeRoot = if (volumeId == "primary") {
+        Environment.getExternalStorageDirectory().path
+    } else {
+        "/storage/$volumeId"
+    }
+
+    return if (relativePath.isBlank()) volumeRoot else "$volumeRoot/$relativePath"
+}

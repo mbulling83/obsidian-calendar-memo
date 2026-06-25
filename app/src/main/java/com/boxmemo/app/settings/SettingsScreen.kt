@@ -183,7 +183,78 @@ private fun VaultSection(
     Spacer(Modifier.height(8.dp))
     DailyNoteStructureSection(store)
     Spacer(Modifier.height(8.dp))
+    DailyNoteTemplateSection(store, savedVaultRoot)
+    Spacer(Modifier.height(8.dp))
     SectionHeadingsSection(store)
+}
+
+/**
+ * Lets the user choose the Templater template used to fill a freshly-created
+ * daily note. We can't run Templater itself (that's Obsidian's JS runtime), so
+ * the app reads this template file and natively renders the common
+ * `<% tp.date… %>` / `<% tp.file.title %>` tags, stripping anything dynamic it
+ * can't evaluate. The path is stored relative to the vault root when the picked
+ * file lives inside the vault, otherwise absolute.
+ */
+@Composable
+private fun DailyNoteTemplateSection(store: VaultSettingsStore, vaultRoot: String?) {
+    val savedPath by store.dailyNoteTemplatePath.collectAsState(initial = null)
+    var pathInput by remember(savedPath) { mutableStateOf(savedPath.orEmpty()) }
+    var savedMessage by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) {
+            val abs = resolveAbsolutePathFromDocumentUri(uri)
+            val root = vaultRoot?.takeIf { it.isNotBlank() }
+            pathInput = when {
+                abs == null -> pathInput
+                root != null && abs.startsWith("$root/") -> abs.removePrefix("$root/")
+                else -> abs
+            }
+            savedMessage = null
+        }
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Daily note template", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "When you create a missing daily note, the app fills it from this Templater " +
+                "template. Date tags (e.g. <% tp.date.now(\"YYYY-MM-DD\") %>) and <% tp.file.title %> " +
+                "are rendered for the note's date; dynamic Templater features (prompts, user scripts) " +
+                "can't run on-device and are removed. Leave blank to just create the section headings.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        OutlinedTextField(
+            value = pathInput,
+            onValueChange = { pathInput = it; savedMessage = null },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Template file") },
+            placeholder = { Text("Templates/Daily Note.md") },
+            singleLine = true,
+        )
+        OutlinedButton(onClick = { filePickerLauncher.launch(arrayOf("text/*", "text/markdown", "*/*")) }) {
+            Text("Browse for template file")
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(
+                onClick = {
+                    scope.launch { store.setDailyNoteTemplatePath(pathInput) }
+                    savedMessage = if (pathInput.isBlank()) "✓ Cleared — new notes use the section headings." else "✓ Saved."
+                },
+            ) { Text("Save template") }
+            OutlinedButton(
+                onClick = {
+                    pathInput = ""
+                    scope.launch { store.setDailyNoteTemplatePath("") }
+                    savedMessage = "✓ Cleared — new notes use the section headings."
+                },
+            ) { Text("Clear") }
+        }
+        savedMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    }
 }
 
 /**

@@ -74,6 +74,8 @@ fun CalendarScreen(
                     events = uiState.events,
                     meetingsSectionMissing = uiState.meetingsSectionMissing,
                     meetingsHeading = uiState.meetingsHeading,
+                    noteExists = uiState.noteExists,
+                    onCreateNote = { viewModel.createDailyNote() },
                     selectedScope = selectedScope,
                     onScopeSelected = { selectedScope = it },
                 )

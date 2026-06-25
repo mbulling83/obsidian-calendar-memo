@@ -9,6 +9,15 @@ sealed interface DailyNoteReadResult {
     object VaultNotConfigured : DailyNoteReadResult
 }
 
+/** Outcome of creating a not-yet-existing daily note from the configured template. */
+sealed interface NoteCreateOutcome {
+    /** The note was created; [usedTemplate] is false when the default scaffold was used. */
+    data class Created(val usedTemplate: Boolean) : NoteCreateOutcome
+    object VaultNotConfigured : NoteCreateOutcome
+    object AlreadyExists : NoteCreateOutcome
+    object WriteFailed : NoteCreateOutcome
+}
+
 /**
  * Outcome of a write into the daily note, carrying enough detail for the UI to
  * tell the user *why* nothing was added rather than failing silently — e.g. the
@@ -40,6 +49,33 @@ class DailyNoteRepository(private val vaultSettings: VaultSettings) {
     /** The configured section headings, exposed so the UI can name them in messages. */
     val meetingsHeading: String get() = vaultSettings.meetingsHeading
     val notesHeading: String get() = vaultSettings.notesHeading
+
+    /**
+     * Creates the daily note for [date] if it doesn't already exist, filling it
+     * from the user's configured Templater template (rendered natively by
+     * [TemplaterRenderer] — see CLAUDE.md, we replicate rather than execute
+     * Templater) or, if no readable template is set, a minimal scaffold of the
+     * configured section headings. Parent folders are created as needed and the
+     * file is written via write-then-replace so LiveSync never sees a partial
+     * note. Refuses to overwrite an existing note.
+     */
+    fun createNote(date: LocalDate): NoteCreateOutcome {
+        val path = vaultSettings.resolveDailyNotePath(date) ?: return NoteCreateOutcome.VaultNotConfigured
+        if (path.exists()) return NoteCreateOutcome.AlreadyExists
+
+        val templateText = vaultSettings.resolveTemplateFile()
+            ?.takeIf { it.isFile }
+            ?.let { runCatching { it.readText() }.getOrNull() }
+        val usedTemplate = templateText != null
+        val body = if (templateText != null) {
+            TemplaterRenderer.render(templateText, date, path.nameWithoutExtension)
+        } else {
+            vaultSettings.defaultNoteScaffold()
+        }
+
+        path.parentFile?.mkdirs()
+        return if (writeNote(date, body)) NoteCreateOutcome.Created(usedTemplate) else NoteCreateOutcome.WriteFailed
+    }
 
     fun readNote(date: LocalDate): DailyNoteReadResult {
         val path = vaultSettings.resolveDailyNotePath(date)

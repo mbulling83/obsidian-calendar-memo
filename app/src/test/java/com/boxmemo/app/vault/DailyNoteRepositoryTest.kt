@@ -187,6 +187,71 @@ class DailyNoteRepositoryTest {
     }
 
     @Test
+    fun `createNote renders the configured Templater template into a new note, creating folders`() {
+        val date = LocalDate.of(2026, 6, 25)
+        val template = tempFolder.newFile("DailyTemplate.md")
+        template.writeText("# <% tp.file.title %>\n\nDate:: <% tp.date.now(\"YYYY-MM-DD\") %>\n# 👥 Meetings\n")
+
+        val repo = DailyNoteRepository(
+            VaultSettings(tempFolder.root.path, dailyNoteTemplatePath = "DailyTemplate.md"),
+        )
+
+        val outcome = repo.createNote(date)
+
+        assertEquals(NoteCreateOutcome.Created(usedTemplate = true), outcome)
+        val noteFile = tempFolder.root
+            .resolve("Periodic Notes/Daily Notes/2026/06 - June/2026-06-25.md")
+        assertTrue(noteFile.exists())
+        assertEquals("# 2026-06-25\n\nDate:: 2026-06-25\n# 👥 Meetings\n", noteFile.readText())
+    }
+
+    @Test
+    fun `createNote falls back to a heading scaffold when no template is configured`() {
+        val date = LocalDate.of(2026, 6, 25)
+        val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
+
+        val outcome = repo.createNote(date)
+
+        assertEquals(NoteCreateOutcome.Created(usedTemplate = false), outcome)
+        val noteFile = tempFolder.root
+            .resolve("Periodic Notes/Daily Notes/2026/06 - June/2026-06-25.md")
+        assertEquals("# 👥 Meetings\n\n# 📝 Notes\n", noteFile.readText())
+    }
+
+    @Test
+    fun `createNote refuses to overwrite an existing note`() {
+        val date = LocalDate.of(2026, 6, 25)
+        val noteFile = tempFolder.newFolder("Periodic Notes", "Daily Notes", "2026", "06 - June")
+            .resolve("2026-06-25.md")
+        noteFile.writeText("existing content")
+
+        val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
+        val outcome = repo.createNote(date)
+
+        assertEquals(NoteCreateOutcome.AlreadyExists, outcome)
+        assertEquals("existing content", noteFile.readText())
+    }
+
+    @Test
+    fun `createNote falls back to the scaffold when the configured template is missing`() {
+        val date = LocalDate.of(2026, 6, 25)
+        val repo = DailyNoteRepository(
+            VaultSettings(tempFolder.root.path, dailyNoteTemplatePath = "Templates/Nope.md"),
+        )
+
+        val outcome = repo.createNote(date)
+
+        assertEquals(NoteCreateOutcome.Created(usedTemplate = false), outcome)
+    }
+
+    @Test
+    fun `createNote reports vault not configured when no vault root is set`() {
+        val repo = DailyNoteRepository(VaultSettings(vaultRoot = null))
+
+        assertEquals(NoteCreateOutcome.VaultNotConfigured, repo.createNote(LocalDate.of(2026, 6, 25)))
+    }
+
+    @Test
     fun `addNoteLines writes converted bullets under the Notes section`() {
         val date = LocalDate.of(2026, 6, 17)
         val noteFile = tempFolder.newFolder("Periodic Notes", "Daily Notes", "2026", "06 - June")
