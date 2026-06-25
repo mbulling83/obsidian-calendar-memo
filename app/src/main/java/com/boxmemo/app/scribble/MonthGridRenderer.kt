@@ -6,7 +6,6 @@ import android.graphics.Paint
 import java.time.LocalDate
 import java.time.YearMonth
 import kotlin.math.ceil
-import kotlin.math.min
 
 private val WEEKDAYS = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
@@ -23,7 +22,11 @@ internal fun weekRowsFor(month: YearMonth): Int {
  * captured on the same surface. [density] scales text/line sizes for the device.
  *
  * Device-verified glue (no JVM test) — the cell-count math lives in
- * [weekRowsFor], which is unit-tested.
+ * [weekRowsFor] and the cell layout in [gridGeometry], both unit-tested.
+ *
+ * When [highlightDay] is set (a search result jumped here), that cell's day
+ * number is drawn in an outlined rounded-square so it reads as distinct from the
+ * filled "today" emphasis.
  */
 fun drawMonthGrid(
     canvas: Canvas,
@@ -32,17 +35,17 @@ fun drawMonthGrid(
     month: YearMonth,
     today: LocalDate,
     density: Float,
+    highlightDay: LocalDate? = null,
 ) {
     if (width <= 0 || height <= 0) return
 
-    val headerHeight = 44f * density
-    val weeks = weekRowsFor(month)
-    val cellWidth = width / 7f
-    val gridTop = headerHeight
-    // Square cells (cellWidth tall), but never taller than the space available
-    // so the grid always fits. The leftover space below becomes a Notes area.
-    val cellHeight = min(cellWidth, (height - gridTop) / weeks)
-    val gridBottom = gridTop + cellHeight * weeks
+    val geom = gridGeometry(month, width, height, density)
+    val headerHeight = geom.headerHeight
+    val weeks = geom.weeks
+    val cellWidth = geom.cellWidth
+    val gridTop = geom.gridTop
+    val cellHeight = geom.cellHeight
+    val gridBottom = geom.gridBottom
 
     val linePaint = Paint().apply {
         color = Color.GRAY
@@ -69,11 +72,23 @@ fun drawMonthGrid(
         isAntiAlias = true
         isFakeBoldText = true
     }
-    val todayCirclePaint = Paint().apply {
+    val todayBoxPaint = Paint().apply {
+        color = Color.BLACK
+        style = Paint.Style.FILL
+        isAntiAlias = true
+    }
+    val highlightBoxPaint = Paint().apply {
         color = Color.BLACK
         style = Paint.Style.STROKE
-        strokeWidth = 2f * density
+        strokeWidth = 2.5f * density
         isAntiAlias = true
+    }
+    val todayTextPaint = Paint().apply {
+        color = Color.WHITE
+        textSize = todayPaint.textSize
+        isAntiAlias = true
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
     }
 
     // Weekday header labels.
@@ -93,10 +108,11 @@ fun drawMonthGrid(
     }
 
     // Day numbers, top-left of each cell.
-    val leadingBlanks = month.atDay(1).dayOfWeek.value - 1
-    val daysInMonth = month.lengthOfMonth()
+    val leadingBlanks = geom.leadingBlanks
+    val daysInMonth = geom.daysInMonth
     val pad = 6f * density
     val isCurrentMonth = YearMonth.from(today) == month
+    val highlightDayOfMonth = highlightDay?.takeIf { YearMonth.from(it) == month }?.dayOfMonth
     for (day in 1..daysInMonth) {
         val cellIndex = leadingBlanks + day - 1
         val col = cellIndex % 7
@@ -104,14 +120,42 @@ fun drawMonthGrid(
         val cellLeft = cellWidth * col
         val cellTop = gridTop + cellHeight * row
         val isToday = isCurrentMonth && today.dayOfMonth == day
+        val isHighlight = !isToday && day == highlightDayOfMonth
         val paint = if (isToday) todayPaint else dayPaint
         val baseline = cellTop + pad - paint.ascent()
         val textX = cellLeft + pad
-        if (isToday) {
-            val radius = paint.textSize * 0.85f
-            canvas.drawCircle(textX + radius / 2.5f, baseline + paint.ascent() / 2.5f, radius, todayCirclePaint)
+        if (isHighlight) {
+            // Outlined rounded-square around the day number — distinct from the
+            // filled "today" marker — to flag the cell a search jumped to.
+            val boxPad = 5f * density
+            val textWidth = paint.measureText(day.toString())
+            val textHeight = paint.descent() - paint.ascent()
+            val boxSize = maxOf(textWidth, textHeight) + boxPad * 2
+            val boxLeft = cellLeft + pad - boxPad
+            val boxTop = cellTop + pad - boxPad
+            val corner = 4f * density
+            canvas.drawRoundRect(
+                boxLeft, boxTop, boxLeft + boxSize, boxTop + boxSize, corner, corner, highlightBoxPaint,
+            )
+            canvas.drawText(day.toString(), textX, baseline, paint)
+        } else if (isToday) {
+            // Filled black rounded-square in the cell corner, day number in white.
+            val boxPad = 5f * density
+            val textWidth = paint.measureText(day.toString())
+            val textHeight = paint.descent() - paint.ascent()
+            val boxSize = maxOf(textWidth, textHeight) + boxPad * 2
+            val boxLeft = cellLeft + pad - boxPad
+            val boxTop = cellTop + pad - boxPad
+            val corner = 4f * density
+            canvas.drawRoundRect(
+                boxLeft, boxTop, boxLeft + boxSize, boxTop + boxSize, corner, corner, todayBoxPaint,
+            )
+            val centerX = boxLeft + boxSize / 2f
+            val centerY = boxTop + boxSize / 2f - (paint.ascent() + paint.descent()) / 2f
+            canvas.drawText(day.toString(), centerX, centerY, todayTextPaint)
+        } else {
+            canvas.drawText(day.toString(), textX, baseline, paint)
         }
-        canvas.drawText(day.toString(), textX, baseline, paint)
     }
 
     // Notes section in the leftover space below the square grid.

@@ -54,8 +54,11 @@ month=2026-07
 hash=<hash of .ink contents>
 day=2026-07-03	dentist appointment 2pm
 day=2026-07-11	call alice re budget
-month=	planning notes top of page
+free=planning notes top of page
 ```
+
+(`free=` carries the month-level / non-grid text; the `month=` header line
+carries the `YearMonth` the index belongs to.)
 
 The `hash` lets us skip re-recognising an unchanged month. Text is stored as
 recognised and lowercased on search.

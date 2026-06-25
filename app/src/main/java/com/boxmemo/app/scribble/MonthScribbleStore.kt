@@ -107,7 +107,7 @@ fun scaleStrokes(
  * tests). Writes go to a `.tmp` sibling and are renamed over the target, the
  * same write-then-replace discipline the vault repositories use.
  */
-class MonthScribbleStore(private val baseDir: File) {
+class MonthScribbleStore(val baseDir: File) {
 
     private fun fileFor(month: YearMonth) = File(baseDir, "$month.ink")
 

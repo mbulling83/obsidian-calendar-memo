@@ -226,6 +226,7 @@ class MainActivity : ComponentActivity() {
                             MonthScribbleScreen(
                                 store = monthScribbleStore,
                                 penSettings = penSettings,
+                                hwrSettingsStore = hwrSettingsStore,
                                 onBack = { screen = Screen.CALENDAR },
                             )
                         }
