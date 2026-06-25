@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -306,6 +307,27 @@ private fun DailyNoteStructureSection(store: VaultSettingsStore) {
             ) { Text("Reset") }
         }
         savedMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+
+        val autoCreate by store.autoCreateMissingNotes.collectAsState(initial = false)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Auto-create missing notes", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "When you add a meeting, note or handwriting to a day with no note yet, " +
+                        "create it from the template automatically. Off: you'll be told the note " +
+                        "doesn't exist and can use \"Create note\" yourself.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Switch(
+                checked = autoCreate,
+                onCheckedChange = { scope.launch { store.setAutoCreateMissingNotes(it) } },
+            )
+        }
     }
 }
 

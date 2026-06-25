@@ -165,11 +165,21 @@ class DailyNoteRepository(private val vaultSettings: VaultSettings) {
         }
     }
 
-    /** Reads the note, mapping the unreadable cases to outcomes before running [block]. */
+    /**
+     * Reads the note, mapping the unreadable cases to outcomes before running
+     * [block]. When the note is missing and auto-create is enabled, it's created
+     * from the configured template first so the user's edit isn't dropped.
+     */
     private inline fun withNoteContent(date: LocalDate, block: (String) -> NoteWriteOutcome): NoteWriteOutcome =
         when (val read = readNote(date)) {
             is DailyNoteReadResult.Found -> block(read.content)
-            DailyNoteReadResult.NoteDoesNotExist -> NoteWriteOutcome.NoteMissing
+            DailyNoteReadResult.NoteDoesNotExist -> {
+                val created = vaultSettings.autoCreateMissingNotes && createNote(date) is NoteCreateOutcome.Created
+                when (val reread = if (created) readNote(date) else read) {
+                    is DailyNoteReadResult.Found -> block(reread.content)
+                    else -> NoteWriteOutcome.NoteMissing
+                }
+            }
             DailyNoteReadResult.VaultNotConfigured -> NoteWriteOutcome.VaultNotConfigured
         }
 

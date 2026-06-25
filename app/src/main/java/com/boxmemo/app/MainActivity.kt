@@ -70,12 +70,15 @@ class MainActivity : ComponentActivity() {
                         .collectAsState(initial = VaultSettings.DEFAULT_TEMPLATE)
                     val dailyNoteTemplatePath by store.dailyNoteTemplatePath
                         .collectAsState(initial = null)
+                    val autoCreateMissingNotes by store.autoCreateMissingNotes
+                        .collectAsState(initial = false)
                     val meetingsHeading by store.meetingsHeading
                         .collectAsState(initial = VaultSettings.DEFAULT_MEETINGS_HEADING)
                     val notesHeading by store.notesHeading
                         .collectAsState(initial = VaultSettings.DEFAULT_NOTES_HEADING)
                     val vaultSettings = remember(
-                        vaultRoot, dailyNoteTemplate, meetingsHeading, notesHeading, dailyNoteTemplatePath,
+                        vaultRoot, dailyNoteTemplate, meetingsHeading, notesHeading,
+                        dailyNoteTemplatePath, autoCreateMissingNotes,
                     ) {
                         VaultSettings(
                             vaultRoot = vaultRoot,
@@ -83,6 +86,7 @@ class MainActivity : ComponentActivity() {
                             meetingsHeading = meetingsHeading,
                             notesHeading = notesHeading,
                             dailyNoteTemplatePath = dailyNoteTemplatePath,
+                            autoCreateMissingNotes = autoCreateMissingNotes,
                         )
                     }
                     // U3 (Google Calendar) is deferred; the no-op repository

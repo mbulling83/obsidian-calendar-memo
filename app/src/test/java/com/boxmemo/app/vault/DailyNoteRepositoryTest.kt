@@ -245,6 +245,44 @@ class DailyNoteRepositoryTest {
     }
 
     @Test
+    fun `addMeeting auto-creates the missing note from the template when enabled, then writes`() {
+        val date = LocalDate.of(2026, 6, 25)
+        val template = tempFolder.newFile("DailyTemplate.md")
+        template.writeText("# <% tp.file.title %>\n\n# 👥 Meetings\n\n# 📝 Notes\n")
+
+        val repo = DailyNoteRepository(
+            VaultSettings(
+                tempFolder.root.path,
+                dailyNoteTemplatePath = "DailyTemplate.md",
+                autoCreateMissingNotes = true,
+            ),
+        )
+
+        val outcome = repo.addMeeting(date, MeetingEntry("14:00", "14:30", "Kickoff", emptyList()))
+
+        assertEquals(NoteWriteOutcome.Written, outcome)
+        val noteFile = tempFolder.root
+            .resolve("Periodic Notes/Daily Notes/2026/06 - June/2026-06-25.md")
+        assertTrue(noteFile.exists())
+        val content = noteFile.readText()
+        assertTrue(content.contains("# 2026-06-25"))
+        assertTrue(content.contains("14:00 - 14:30: Kickoff"))
+    }
+
+    @Test
+    fun `addMeeting still reports NoteMissing when auto-create is disabled`() {
+        val date = LocalDate.of(2026, 6, 25)
+        val repo = DailyNoteRepository(
+            VaultSettings(tempFolder.root.path, autoCreateMissingNotes = false),
+        )
+
+        val outcome = repo.addMeeting(date, MeetingEntry("14:00", "14:30", "Kickoff", emptyList()))
+
+        assertEquals(NoteWriteOutcome.NoteMissing, outcome)
+        assertTrue(repo.readNote(date) is DailyNoteReadResult.NoteDoesNotExist)
+    }
+
+    @Test
     fun `createNote reports vault not configured when no vault root is set`() {
         val repo = DailyNoteRepository(VaultSettings(vaultRoot = null))
 

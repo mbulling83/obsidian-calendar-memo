@@ -27,6 +27,13 @@ class VaultSettings(
      * [defaultNoteScaffold] of the configured section headings instead.
      */
     val dailyNoteTemplatePath: String? = null,
+    /**
+     * Whether a write to a not-yet-existing daily note (quick-add, conversion)
+     * should create it first rather than failing. Defaults false for direct
+     * construction (preserving the "note must exist" contract); the app's
+     * runtime value comes from `VaultSettingsStore.autoCreateMissingNotes`.
+     */
+    val autoCreateMissingNotes: Boolean = false,
 ) {
 
     /**

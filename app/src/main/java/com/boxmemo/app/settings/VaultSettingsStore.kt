@@ -1,6 +1,7 @@
 package com.boxmemo.app.settings
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -12,6 +13,7 @@ private val Context.vaultDataStore by preferencesDataStore(name = "vault_setting
 private val VAULT_ROOT_KEY = stringPreferencesKey("vault_root")
 private val DAILY_NOTE_TEMPLATE_KEY = stringPreferencesKey("daily_note_template")
 private val DAILY_NOTE_TEMPLATE_PATH_KEY = stringPreferencesKey("daily_note_template_path")
+private val AUTO_CREATE_MISSING_NOTES_KEY = booleanPreferencesKey("auto_create_missing_notes")
 private val MEETINGS_HEADING_KEY = stringPreferencesKey("meetings_heading")
 private val NOTES_HEADING_KEY = stringPreferencesKey("notes_heading")
 
@@ -37,6 +39,16 @@ class VaultSettingsStore(private val context: Context) {
     val dailyNoteTemplatePath: Flow<String?> =
         context.vaultDataStore.data.map { it[DAILY_NOTE_TEMPLATE_PATH_KEY] }
 
+    /**
+     * Whether the app should auto-create a missing daily note when the user
+     * adds to it (quick-add / handwriting conversion). Off by default: the
+     * native template render is best-effort (dynamic Templater tags are
+     * stripped), so generating pages is opt-in. The manual "Create note" button
+     * works regardless.
+     */
+    val autoCreateMissingNotes: Flow<Boolean> =
+        context.vaultDataStore.data.map { it[AUTO_CREATE_MISSING_NOTES_KEY] ?: false }
+
     val meetingsHeading: Flow<String> =
         context.vaultDataStore.data.map { it[MEETINGS_HEADING_KEY] ?: VaultSettings.DEFAULT_MEETINGS_HEADING }
 
@@ -57,6 +69,10 @@ class VaultSettingsStore(private val context: Context) {
             val trimmed = path.trim()
             if (trimmed.isEmpty()) it.remove(DAILY_NOTE_TEMPLATE_PATH_KEY) else it[DAILY_NOTE_TEMPLATE_PATH_KEY] = trimmed
         }
+    }
+
+    suspend fun setAutoCreateMissingNotes(enabled: Boolean) {
+        context.vaultDataStore.edit { it[AUTO_CREATE_MISSING_NOTES_KEY] = enabled }
     }
 
     suspend fun setMeetingsHeading(heading: String) {
