@@ -41,8 +41,8 @@ Target device: Boox U7 (and compatible Onyx Boox hardware running Android 10+, m
 | `hwr/` | Recognition: `OnyxHWREngine` (AIDL to firmware MyScript service), `BulletFormatter` |
 | `gcal/` | `GoogleCalendarRepository` interface + `NoOpGoogleCalendarRepository` (GCal OAuth deferred) |
 | `quickadd/` | Quick-add form composables for adding meetings/notes via text |
-| `settings/` | `SettingsScreen`, `VaultSettingsStore` (DataStore: vault root, folder template, section headings), `PenSettingsStore`/`HwrSettingsStore`/`OnboardingSettingsStore` (DataStore), vault permission helpers |
-| `onboarding/` | `OnboardingScreen`: first-run welcome tour (file access → vault path → feature highlights), shown once and re-openable from Settings |
+| `settings/` | `SettingsScreen` (e-ink card-grouped settings page), `DailyNoteControls` (reusable folder-structure + Templater-template + auto-create controls, shared with onboarding), `VaultSettingsStore` (DataStore: vault root, folder template, section headings, template path, auto-create flag), `PenSettingsStore`/`HwrSettingsStore`/`OnboardingSettingsStore` (DataStore), vault permission helpers |
+| `onboarding/` | `OnboardingScreen`: first-run welcome tour (file access → vault path → daily-note location → Templater template → feature highlights), shown once and re-openable from Settings; the daily-note location and template steps reuse `settings/DailyNoteControls` |
 | `vaultcheck/` | `VaultCheckScreen` (diagnosis + one-tap fixes) and `VaultHealthBanner` (Calendar warning when no meetings can be read) — driven by `vault/VaultScanner` |
 | `ui/` | Shared `AppTopBar`, typography |
 

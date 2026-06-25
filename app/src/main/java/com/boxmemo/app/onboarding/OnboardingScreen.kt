@@ -31,6 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.boxmemo.app.settings.DailyNoteStructureControls
+import com.boxmemo.app.settings.DailyNoteTemplateControls
 import com.boxmemo.app.settings.OnboardingSettingsStore
 import com.boxmemo.app.settings.VaultSettingsStore
 import com.boxmemo.app.settings.resolveAbsolutePathFromTreeUri
@@ -105,6 +107,8 @@ fun OnboardingScreen(
                     onVaultInputChange = { vaultInput = it },
                     saveVaultIfValid = { saveVaultIfValid(it) },
                 )
+                OnboardingStep.DAILY_NOTES -> DailyNotesStep(vaultSettingsStore)
+                OnboardingStep.TEMPLATE -> TemplateStep(vaultSettingsStore, savedVaultRoot)
                 OnboardingStep.FEATURES -> FeaturesStep()
                 OnboardingStep.DONE -> DoneStep()
             }
@@ -141,7 +145,7 @@ fun OnboardingScreen(
     }
 }
 
-private enum class OnboardingStep { WELCOME, PERMISSION, VAULT, FEATURES, DONE }
+private enum class OnboardingStep { WELCOME, PERMISSION, VAULT, DAILY_NOTES, TEMPLATE, FEATURES, DONE }
 
 @Composable
 private fun StepHeading(title: String) {
@@ -268,6 +272,39 @@ private fun VaultStep(
 }
 
 @Composable
+private fun DailyNotesStep(vaultSettingsStore: VaultSettingsStore) {
+    StepHeading("Where your daily notes live")
+    StepBody(
+        "The app needs to know the folder layout of your daily notes inside the vault. " +
+            "The default matches the Obsidian Periodic Notes plugin — if that's you, you can " +
+            "leave it as is and tap Next.",
+    )
+    StepBody(
+        "Otherwise, edit the template below to match your vault, then tap Save. Not sure? " +
+            "You can also auto-detect it later from Settings → \"Check vault setup\".",
+    )
+    Spacer(Modifier.height(8.dp))
+    DailyNoteStructureControls(vaultSettingsStore)
+}
+
+@Composable
+private fun TemplateStep(vaultSettingsStore: VaultSettingsStore, vaultRoot: String?) {
+    StepHeading("Daily note template")
+    StepBody(
+        "If you use the Templater plugin, point the app at your daily-note template. When a " +
+            "note doesn't exist yet, the app fills a new one from it — rendering the date and " +
+            "title tags for you.",
+    )
+    StepBody(
+        "This is optional, and a best-effort copy: dynamic Templater features (prompts, " +
+            "scripts) can't run here and are skipped. Leave it blank to create just your section " +
+            "headings. You can change all of this later in Settings.",
+    )
+    Spacer(Modifier.height(8.dp))
+    DailyNoteTemplateControls(vaultSettingsStore, vaultRoot)
+}
+
+@Composable
 private fun FeaturesStep() {
     StepHeading("What you can do")
     FeatureRow(
@@ -293,6 +330,11 @@ private fun FeaturesStep() {
     FeatureRow(
         "Quick add",
         "Use the + button to add a meeting or note by typing, without the pen.",
+    )
+    FeatureRow(
+        "Create missing notes",
+        "On a day with no note yet, tap \"Create note\" to start one from your Templater " +
+            "template (or just the section headings).",
     )
 }
 
