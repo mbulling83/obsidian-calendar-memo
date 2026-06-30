@@ -39,6 +39,10 @@ import com.boxmemo.app.settings.launchAllFilesAccessSettings
 import com.boxmemo.app.ui.AppTopBar
 import com.boxmemo.app.ui.BoxMemoColorScheme
 import com.boxmemo.app.ui.BoxMemoTypography
+import com.boxmemo.app.update.ManualCheckResult
+import com.boxmemo.app.update.UpdateBanner
+import com.boxmemo.app.update.UpdateManager
+import com.boxmemo.app.update.UpdateSettingsStore
 import com.boxmemo.app.memo.PenSettings
 import com.boxmemo.app.vault.DailyNoteRepository
 import com.boxmemo.app.vault.DiagramRepository
@@ -62,6 +66,11 @@ class MainActivity : ComponentActivity() {
         val penSettingsStore = PenSettingsStore(applicationContext)
         val hwrSettingsStore = HwrSettingsStore(applicationContext)
         val onboardingStore = OnboardingSettingsStore(applicationContext)
+        val updateManager = UpdateManager(
+            appContext = applicationContext,
+            currentVersion = BuildConfig.VERSION_NAME,
+            store = UpdateSettingsStore(applicationContext),
+        )
 
         setContent {
             MaterialTheme(colorScheme = BoxMemoColorScheme, typography = BoxMemoTypography) {
@@ -148,6 +157,22 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
+                    // In-app updater: throttled GitHub check once per launch.
+                    val updateState by updateManager.state.collectAsState()
+                    val updateScope = rememberCoroutineScope()
+                    LaunchedEffect(Unit) { updateManager.checkOnLaunch() }
+                    val onCheckForUpdates: () -> Unit = {
+                        updateScope.launch {
+                            val result = updateManager.checkNow()
+                            val text = when (result) {
+                                ManualCheckResult.UPDATE_AVAILABLE -> "Update available — see the Calendar."
+                                ManualCheckResult.UP_TO_DATE -> "You're on the latest version."
+                                ManualCheckResult.CHECK_FAILED -> "Couldn't check — check your connection."
+                            }
+                            Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+                        }
+                    }
+
                     if (onboardingComplete == null) {
                         // Still loading the onboarding flag — render nothing
                         // this frame to avoid flashing the tour, then the real
@@ -181,6 +206,13 @@ class MainActivity : ComponentActivity() {
                                         onDismiss = { bannerDismissed = true },
                                     )
                                 }
+                                UpdateBanner(
+                                    state = updateState,
+                                    onUpdate = { release ->
+                                        updateScope.launch { updateManager.downloadAndInstall(release) }
+                                    },
+                                    onDismiss = { updateManager.dismiss() },
+                                )
                                 CalendarScreen(
                                     viewModel = viewModel,
                                     dailyNoteRepository = dailyNoteRepository,
@@ -200,6 +232,7 @@ class MainActivity : ComponentActivity() {
                                 hasAllFilesAccess = { VaultPermission.hasAllFilesAccess() },
                                 onShowOnboarding = { forceOnboarding = true },
                                 onCheckVault = { screen = Screen.VAULT_CHECK },
+                                onCheckForUpdates = onCheckForUpdates,
                             )
                         }
                         Screen.VAULT_CHECK -> {

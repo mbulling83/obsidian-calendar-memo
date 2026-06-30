@@ -38,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.boxmemo.app.BuildConfig
 import com.boxmemo.app.hwr.HwrEngineType
 import com.boxmemo.app.hwr.MlKitHWREngine
 import com.boxmemo.app.memo.PenSettingsStore
@@ -62,6 +63,7 @@ fun SettingsScreen(
     hasAllFilesAccess: () -> Boolean,
     onShowOnboarding: () -> Unit = {},
     onCheckVault: () -> Unit = {},
+    onCheckForUpdates: () -> Unit = {},
 ) {
     val vaultRoot by store.vaultRoot.collectAsState(initial = null)
 
@@ -99,10 +101,25 @@ fun SettingsScreen(
             SettingsCard("Handwriting recognition") {
                 HwrControls(hwrSettingsStore)
             }
+            SettingsCard("Updates") {
+                UpdateControls(onCheckForUpdates)
+            }
             SettingsCard("Help") {
                 HelpControls(onShowOnboarding)
             }
         }
+    }
+}
+
+@Composable
+private fun UpdateControls(onCheckForUpdates: () -> Unit) {
+    Text(
+        "You're on v${BuildConfig.VERSION_NAME}. The app checks GitHub for a new " +
+            "release on launch and offers a one-tap update on the Calendar.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    OutlinedButton(onClick = onCheckForUpdates, modifier = Modifier.heightIn(min = 52.dp)) {
+        Text("Check for updates now")
     }
 }
 
