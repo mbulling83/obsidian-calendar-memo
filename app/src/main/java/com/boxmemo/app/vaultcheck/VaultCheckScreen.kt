@@ -133,7 +133,7 @@ fun VaultCheckScreen(
             }
 
             Spacer(Modifier.height(8.dp))
-            HorizontalDivider()
+            HorizontalDivider(thickness = 2.dp)
             OutlinedButton(onClick = onRescan) { Text("Re-scan") }
         }
     }
@@ -152,7 +152,7 @@ private fun Body(text: String) {
 @Composable
 private fun Recommendation(explanation: String, action: String, onApply: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        HorizontalDivider()
+        HorizontalDivider(thickness = 2.dp)
         Text(explanation, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
         Button(onClick = onApply) { Text(action) }
     }

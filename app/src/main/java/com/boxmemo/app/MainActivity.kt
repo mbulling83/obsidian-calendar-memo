@@ -37,6 +37,7 @@ import com.boxmemo.app.settings.VaultPermission
 import com.boxmemo.app.settings.VaultSettingsStore
 import com.boxmemo.app.settings.launchAllFilesAccessSettings
 import com.boxmemo.app.ui.AppTopBar
+import com.boxmemo.app.ui.BoxMemoColorScheme
 import com.boxmemo.app.ui.BoxMemoTypography
 import com.boxmemo.app.memo.PenSettings
 import com.boxmemo.app.vault.DailyNoteRepository
@@ -63,7 +64,7 @@ class MainActivity : ComponentActivity() {
         val onboardingStore = OnboardingSettingsStore(applicationContext)
 
         setContent {
-            MaterialTheme(typography = BoxMemoTypography) {
+            MaterialTheme(colorScheme = BoxMemoColorScheme, typography = BoxMemoTypography) {
                 Surface {
                     val vaultRoot by store.vaultRoot.collectAsState(initial = null)
                     val dailyNoteTemplate by store.dailyNoteTemplate

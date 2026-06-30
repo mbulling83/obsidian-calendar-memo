@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
@@ -52,7 +53,10 @@ fun CalendarScreen(
     val meetings = uiState.events.filterIsInstance<DayEvent.ObsidianMeeting>()
     var selectedScope by remember(uiState.date) { mutableStateOf<CaptureScope>(CaptureScope.Notes) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    // Perimeter breathing room. 16dp horizontal matches AppTopBar's inset, so
+    // the grid/agenda left edge lines up with the clock and date above it
+    // rather than running to the screen edge.
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(modifier = Modifier.fillMaxWidth().height(CALENDAR_SECTION_HEIGHT)) {
             Column(modifier = Modifier.weight(1f).fillMaxHeight()) {
                 // calendar takes ~1/3 of the width

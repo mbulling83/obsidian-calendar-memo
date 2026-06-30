@@ -126,7 +126,7 @@ fun VaultNotesScreen(
 @Composable
 private fun FilePickerHeader(onBack: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onBack) {
@@ -143,7 +143,7 @@ private fun FilePickerHeader(onBack: () -> Unit) {
 @Composable
 private fun EditorHeader(fileName: String, onBack: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(onClick = onBack) {
@@ -167,7 +167,7 @@ private fun FilePicker(
 ) {
     var mode by remember { mutableStateOf(PickerMode.TREE) }
 
-    Column(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+    Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             FilterChip(
                 selected = mode == PickerMode.TREE,

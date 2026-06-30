@@ -49,7 +49,9 @@ fun drawMonthGrid(
 
     val linePaint = Paint().apply {
         color = Color.GRAY
-        strokeWidth = 1.8f * density
+        // E-ink: thin hairlines vanish. Skill-tested guideline weight is GRAY
+        // 2.5dp; the grid stays heavier than the ruled "Notes" lines below.
+        strokeWidth = 2.5f * density
         style = Paint.Style.STROKE
         isAntiAlias = false
     }
@@ -168,8 +170,10 @@ fun drawMonthGrid(
             isFakeBoldText = true
         }
         val ruledPaint = Paint().apply {
-            color = Color.LTGRAY
-            strokeWidth = 1.2f * density
+            // LTGRAY hairlines disappear on e-ink — use GRAY, thicker, but
+            // kept lighter than the grid lines above so the hierarchy reads.
+            color = Color.GRAY
+            strokeWidth = 1.8f * density
             style = Paint.Style.STROKE
             isAntiAlias = false
         }

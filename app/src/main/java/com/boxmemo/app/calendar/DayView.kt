@@ -86,7 +86,7 @@ fun DayEventList(
                 DayEventRow(event, selectedScope, onScopeSelected)
             }
             item {
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                HorizontalDivider(thickness = 2.dp, modifier = Modifier.padding(vertical = 4.dp))
                 val isSelected = selectedScope == CaptureScope.Notes
                 Row(
                     modifier = Modifier

@@ -1,6 +1,7 @@
 package com.boxmemo.app.calendar
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +19,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
@@ -105,6 +107,14 @@ private fun DayCell(day: Int, isToday: Boolean, isSelected: Boolean, onClick: ()
             .fillMaxWidth()
             .clip(RoundedCornerShape(4.dp))
             .background(background)
+            // Selected and today both rely on pale container tints that
+            // collapse to near-identical greys on e-ink; a structural black
+            // border (anchor colour, not an invented grey) makes the selected
+            // day unambiguous regardless of how the fills render on the panel.
+            .then(
+                if (isSelected) Modifier.border(2.dp, Color.Black, RoundedCornerShape(4.dp))
+                else Modifier
+            )
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

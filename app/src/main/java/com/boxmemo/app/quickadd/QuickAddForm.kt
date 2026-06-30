@@ -50,8 +50,8 @@ fun QuickAddForm(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(text = "New Meeting", style = MaterialTheme.typography.titleLarge)
-            HorizontalDivider()
+            Text(text = "New meeting", style = MaterialTheme.typography.titleLarge)
+            HorizontalDivider(thickness = 2.dp)
             TimeField(label = "Start", time = startTime, onTimeSelected = { startTime = it })
             EndTimeField(startTime = startTime, endTime = endTime, onEndTimeSelected = { endTime = it })
             OutlinedTextField(

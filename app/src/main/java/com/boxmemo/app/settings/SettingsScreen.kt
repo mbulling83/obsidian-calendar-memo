@@ -90,7 +90,7 @@ fun SettingsScreen(
             SettingsCard("Daily note template") {
                 DailyNoteTemplateControls(store, vaultRoot)
             }
-            SettingsCard("Daily-note sections") {
+            SettingsCard("Daily note sections") {
                 SectionHeadingsControls(store)
             }
             SettingsCard("Pen") {

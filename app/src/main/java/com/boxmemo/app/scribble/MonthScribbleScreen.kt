@@ -270,7 +270,6 @@ fun MonthScribbleScreen(
                 results = results,
                 onSelect = { jumpTo(it) },
             )
-            HorizontalDivider(thickness = 1.dp)
         }
 
         HorizontalDivider(thickness = 2.dp)

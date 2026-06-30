@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -195,13 +194,13 @@ private fun PermissionStep(
     )
     Spacer(Modifier.height(8.dp))
     Text(
-        if (granted) "✓ File access granted" else "File access not granted yet",
+        if (granted) "✓ All-files access granted" else "All-files access not granted yet",
         style = MaterialTheme.typography.titleMedium,
         fontWeight = FontWeight.Bold,
     )
     Spacer(Modifier.height(12.dp))
     Button(onClick = onRequestAllFilesAccess) {
-        Text(if (granted) "Open file-access settings again" else "Grant file access")
+        Text(if (granted) "Open all-files-access settings again" else "Grant all-files access")
     }
 }
 
@@ -266,7 +265,7 @@ private fun VaultStep(
     Text(
         "The app reads meetings and notes from sections in your daily note. If your " +
             "headings differ from the defaults (👥 Meetings and 📝 Notes), set the names " +
-            "in Settings → Daily-note sections — it's forgiving about #'s and case.",
+            "in Settings → Daily note sections — it's forgiving about #'s and case.",
         style = MaterialTheme.typography.bodyMedium,
     )
 }
@@ -318,7 +317,7 @@ private fun FeaturesStep() {
             "turns your handwriting into Markdown bullets, saved straight into the note.",
     )
     FeatureRow(
-        "Vault Notes",
+        "Vault notes",
         "Pick any Markdown file in your vault and handwrite bullets — or save your " +
             "scribble as a diagram image — into it at the line you tap.",
     )
@@ -353,12 +352,9 @@ private fun DoneStep() {
     StepBody("That's everything. You can change the vault path or pen any time in Settings.")
     StepBody("Tip: re-open this tour from Settings whenever you want a refresher.")
     Spacer(Modifier.height(8.dp))
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Spacer(Modifier.width(0.dp))
-        Text(
-            "Tap \"Get started\" to open your calendar.",
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.Bold,
-        )
-    }
+    Text(
+        "Tap \"Get started\" to open your calendar.",
+        style = MaterialTheme.typography.bodyLarge,
+        fontWeight = FontWeight.Bold,
+    )
 }

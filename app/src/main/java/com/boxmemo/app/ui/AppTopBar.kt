@@ -50,8 +50,12 @@ fun AppTopBar(
     var now by remember { mutableStateOf(LocalDateTime.now()) }
     LaunchedEffect(Unit) {
         while (true) {
-            now = LocalDateTime.now()
-            delay(30_000)
+            val current = LocalDateTime.now()
+            now = current
+            // The clock shows minute resolution, so repaint exactly when the
+            // minute flips — one e-ink panel update per minute, rather than a
+            // redundant one every 30s. Sleep to just past the next boundary.
+            delay(60_000L - (current.second * 1000L + current.nano / 1_000_000L))
         }
     }
 
