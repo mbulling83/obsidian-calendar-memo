@@ -15,7 +15,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+
+/**
+ * First meaningful line of a GitHub release body, with light Markdown stripped
+ * (`**bold**`, `*`, backticks, leading `#`/`-`/`>`) so the banner shows clean
+ * prose rather than raw syntax. Null if the body has no prose line.
+ */
+private fun releaseTeaser(notes: String): String? =
+    notes.lineSequence()
+        .map { it.trim() }
+        .firstOrNull { it.isNotEmpty() && !it.startsWith("#") && !it.startsWith("---") }
+        ?.replace("**", "")
+        ?.replace("`", "")
+        ?.trimStart('#', '-', '>', '*', ' ')
+        ?.takeIf { it.isNotBlank() }
 
 /**
  * Black-bordered Calendar banner offering a one-tap update when a newer release
@@ -46,11 +61,14 @@ fun UpdateBanner(
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
             )
-            val firstLine = release.notes.lineSequence()
-                .map { it.trim() }
-                .firstOrNull { it.isNotEmpty() && !it.startsWith("#") && !it.startsWith("---") }
-            if (firstLine != null) {
-                Text(firstLine, style = MaterialTheme.typography.bodySmall)
+            val teaser = releaseTeaser(release.notes)
+            if (teaser != null) {
+                Text(
+                    teaser,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             if (state is UpdateUiState.Failed) {
                 Text(
