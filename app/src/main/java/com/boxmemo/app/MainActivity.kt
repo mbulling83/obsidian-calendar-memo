@@ -39,7 +39,6 @@ import com.boxmemo.app.settings.launchAllFilesAccessSettings
 import com.boxmemo.app.ui.AppTopBar
 import com.boxmemo.app.ui.BoxMemoColorScheme
 import com.boxmemo.app.ui.BoxMemoTypography
-import com.boxmemo.app.ui.installKeyboardGhostRefresh
 import com.boxmemo.app.update.ManualCheckResult
 import com.boxmemo.app.update.UpdateBanner
 import com.boxmemo.app.update.UpdateManager
@@ -62,10 +61,6 @@ private enum class Screen { CALENDAR, SETTINGS, VAULT_NOTES, MONTH_SCRIBBLE, VAU
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Clear the ghost strokes the Onyx handwriting keyboard leaves on the
-        // panel when it's dismissed (e.g. over the quick-add title field).
-        installKeyboardGhostRefresh()
 
         val store = VaultSettingsStore(applicationContext)
         val penSettingsStore = PenSettingsStore(applicationContext)

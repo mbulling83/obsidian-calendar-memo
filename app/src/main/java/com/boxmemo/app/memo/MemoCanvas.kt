@@ -42,6 +42,10 @@ fun MemoCanvas(
     modifier: Modifier = Modifier,
     flushHandle: InkFlushHandle? = null,
     backgroundRenderer: ((android.graphics.Canvas, Int, Int) -> Unit)? = null,
+    // Suspends pen capture (e.g. while a search field's handwriting keyboard is
+    // up), so strokes meant for the keyboard aren't grabbed by the raw-drawing
+    // layer and left as stray ink on the canvas.
+    penCaptureSuspended: Boolean = false,
 ) {
     AndroidView(
         modifier = modifier.fillMaxWidth().fillMaxHeight(),
@@ -54,6 +58,7 @@ fun MemoCanvas(
         update = { view ->
             view.isEraserActive = isEraserActive
             view.setGuidelineStyle(guidelineStyle)
+            view.setPenCaptureSuspended(penCaptureSuspended)
             view.syncStrokes(strokes)
         },
         onRelease = { flushHandle?.surface = null },

@@ -42,6 +42,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -117,6 +118,9 @@ fun MonthScribbleScreen(
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<ScribbleHit>>(emptyList()) }
     var searched by remember { mutableStateOf(false) }
+    // While the search field holds focus its handwriting keyboard is up; suspend
+    // the ink surface's pen capture so keystrokes aren't grabbed as stray ink.
+    var searchFocused by remember { mutableStateOf(false) }
 
     // Strokes for the displayed month, scaled to the live canvas. Driven into
     // MemoCanvas; its callbacks write back here.
@@ -242,7 +246,9 @@ fun MonthScribbleScreen(
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .onFocusChanged { searchFocused = it.isFocused },
                 singleLine = true,
                 label = { Text("Search handwriting") },
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
@@ -317,6 +323,7 @@ fun MonthScribbleScreen(
                     },
                     modifier = Modifier.fillMaxSize(),
                     flushHandle = inkHandle,
+                    penCaptureSuspended = searchFocused,
                     backgroundRenderer = { canvas, cw, ch ->
                         drawMonthGrid(canvas, cw, ch, month, today, densityValue, highlightDay)
                     },

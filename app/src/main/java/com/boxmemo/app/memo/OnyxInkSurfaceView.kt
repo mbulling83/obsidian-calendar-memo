@@ -50,6 +50,34 @@ class OnyxInkSurfaceView(
     var isEraserActive: Boolean = false
 
     /**
+     * Suspends raw-drawing pen capture without recreating the surface.
+     *
+     * Onyx raw drawing captures the pen *screen-wide*, bypassing the view
+     * hierarchy — so while it's enabled, strokes the user makes on the system
+     * handwriting keyboard (e.g. the Vault Notes / month-scribble search field)
+     * are grabbed by this surface and painted onto the panel's raw layer, where
+     * they persist as stray ink. The soft keyboard doesn't steal *window* focus,
+     * so [onWindowFocusChanged] never fires to disable capture for it. Screens
+     * with a focusable text field over the canvas drive this flag from the
+     * field's focus state instead.
+     */
+    private var penCaptureSuspended: Boolean = false
+
+    fun setPenCaptureSuspended(suspended: Boolean) {
+        if (suspended == penCaptureSuspended) return
+        penCaptureSuspended = suspended
+        val helper = touchHelper ?: return
+        if (suspended) {
+            // Disable capture and repaint our normal buffer, which also clears
+            // any stray ink the firmware left on the raw layer.
+            helper.setRawDrawingEnabled(false)
+            redrawExistingStrokes(holder)
+        } else if (hasWindowFocus()) {
+            helper.setRawDrawingEnabled(true)
+        }
+    }
+
+    /**
      * Resyncs on-screen ink to [strokes] when it differs from what's currently
      * drawn — driven by MemoCanvas's update lambda so external changes (e.g. a
      * conversion clearing the scope) actually wipe the ink. A user's own
@@ -166,7 +194,7 @@ class OnyxInkSurfaceView(
     override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
         super.onWindowFocusChanged(hasWindowFocus)
         val helper = touchHelper ?: return
-        if (hasWindowFocus) {
+        if (hasWindowFocus && !penCaptureSuspended) {
             helper.setRawDrawingEnabled(true)
         } else {
             helper.setRawDrawingEnabled(false)
