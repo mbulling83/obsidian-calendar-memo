@@ -153,6 +153,23 @@ class MeetingSectionParserTest {
     }
 
     @Test
+    fun `skips meeting lines with out-of-range hours or minutes`() {
+        // LocalTime.parse downstream would crash on these — they must not become entries.
+        val content = """
+            # 👥 Meetings
+            - 24:00 - 25:00: Late
+            - 09:75 - 10:00: Bad
+            - 09:00 - 09:30: Standup
+            ---
+            # Memos
+        """.trimIndent()
+
+        val result = parseMeetingsSection(content) as MeetingSectionParseResult.Found
+
+        assertEquals(listOf("Standup"), result.entries.map { it.title })
+    }
+
+    @Test
     fun `parsing does not include content from Notes, Memos, or dataview sections`() {
         val result = parseMeetingsSection(realDailyNote) as MeetingSectionParseResult.Found
 

@@ -23,10 +23,15 @@ import java.time.format.DateTimeFormatter
 
 private val HHMM = DateTimeFormatter.ofPattern("HH:mm")
 
-/** Round [time] up to the next 15-minute mark so the steppers start on the grid. */
+/**
+ * Round [time] up to the next 15-minute mark so the steppers start on the grid.
+ * Capped at 23:45 — opening the form just before midnight must not roll the
+ * default start into 00:00 of the wrong day.
+ */
 private fun roundUpTo15(time: LocalTime): LocalTime {
     val truncated = time.withSecond(0).withNano(0).withMinute((time.minute / 15) * 15)
-    return if (truncated == time.withSecond(0).withNano(0)) truncated else truncated.plusMinutes(15)
+    val rounded = if (truncated == time.withSecond(0).withNano(0)) truncated else truncated.plusMinutes(15)
+    return if (rounded.isBefore(truncated)) LocalTime.of(23, 45) else rounded
 }
 
 /**
@@ -62,7 +67,10 @@ fun QuickAddForm(
             )
             Button(
                 modifier = Modifier.fillMaxWidth(),
-                enabled = title.isNotBlank() && endTime.isAfter(startTime),
+                // No end-after-start requirement: the note format is plain
+                // HH:MM strings, and a meeting can legitimately cross midnight
+                // (e.g. 23:45 – 00:15) — it's written as-is.
+                enabled = title.isNotBlank(),
                 onClick = {
                     onAddMeeting(startTime.format(HHMM), endTime.format(HHMM), title)
                     title = ""

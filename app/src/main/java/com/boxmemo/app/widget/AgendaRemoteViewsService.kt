@@ -38,9 +38,20 @@ private class AgendaRemoteViewsFactory(
     }
 
     private fun loadMeetings(): List<MeetingEntry> {
-        val vaultRoot = runBlocking { VaultSettingsStore(context).vaultRoot.first() }
-        if (vaultRoot.isNullOrBlank()) return emptyList()
-        val repository = DailyNoteRepository(VaultSettings(vaultRoot))
+        // Build the same VaultSettings the app does — the configured folder
+        // template and meetings heading, not just the root — so the widget
+        // reads the same note and section as the calendar.
+        val store = VaultSettingsStore(context)
+        val settings = runBlocking {
+            val vaultRoot = store.vaultRoot.first()
+            if (vaultRoot.isNullOrBlank()) return@runBlocking null
+            VaultSettings(
+                vaultRoot = vaultRoot,
+                dailyNoteSubpathTemplate = store.dailyNoteTemplate.first(),
+                meetingsHeading = store.meetingsHeading.first(),
+            )
+        } ?: return emptyList()
+        val repository = DailyNoteRepository(settings)
         val result = repository.readMeetings(LocalDate.now())
         return (result as? MeetingSectionParseResult.Found)
             ?.entries

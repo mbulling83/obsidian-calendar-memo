@@ -120,18 +120,20 @@ object MomentFormat {
         return sb.toString()
     }
 
+    // Locale.ROOT on numeric formats so non-Latin-digit device locales can't
+    // corrupt the rendered dates.
     private fun renderToken(token: String, date: LocalDate): String = when (token) {
-        "YYYY" -> "%04d".format(date.year)
-        "YY" -> "%02d".format(date.year % 100)
+        "YYYY" -> "%04d".format(Locale.ROOT, date.year)
+        "YY" -> "%02d".format(Locale.ROOT, date.year % 100)
         "MMMM" -> date.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)
         "MMM" -> date.month.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
-        "MM" -> "%02d".format(date.monthValue)
+        "MM" -> "%02d".format(Locale.ROOT, date.monthValue)
         "Mo" -> ordinal(date.monthValue)
         "M" -> date.monthValue.toString()
-        "DDDD" -> "%03d".format(date.dayOfYear)
+        "DDDD" -> "%03d".format(Locale.ROOT, date.dayOfYear)
         "DDD" -> date.dayOfYear.toString()
         "Do" -> ordinal(date.dayOfMonth)
-        "DD" -> "%02d".format(date.dayOfMonth)
+        "DD" -> "%02d".format(Locale.ROOT, date.dayOfMonth)
         "D" -> date.dayOfMonth.toString()
         "dddd" -> date.dayOfWeek.getDisplayName(TextStyle.FULL, Locale.ENGLISH)
         "ddd" -> date.dayOfWeek.getDisplayName(TextStyle.SHORT, Locale.ENGLISH)
@@ -140,7 +142,7 @@ object MomentFormat {
         "d", "e" -> (date.dayOfWeek.value % 7).toString()
         "do" -> ordinal(date.dayOfWeek.value % 7)
         // ISO week of year for `W`/`w` (Periodic Notes' convention).
-        "WW", "ww" -> "%02d".format(date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR))
+        "WW", "ww" -> "%02d".format(Locale.ROOT, date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR))
         "W", "w" -> date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR).toString()
         "Wo", "wo" -> ordinal(date.get(IsoFields.WEEK_OF_WEEK_BASED_YEAR))
         "Q" -> date.get(IsoFields.QUARTER_OF_YEAR).toString()

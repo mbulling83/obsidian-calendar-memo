@@ -13,6 +13,8 @@ import kotlin.math.min
  * JVM-unit-testable.
  */
 data class GridGeometry(
+    val width: Float,
+    val height: Float,
     val headerHeight: Float,
     val cellWidth: Float,
     val cellHeight: Float,
@@ -33,10 +35,14 @@ fun gridGeometry(month: YearMonth, width: Int, height: Int, density: Float): Gri
     val cellWidth = width / 7f
     val gridTop = headerHeight
     // Square cells, never taller than the space available (matches drawMonthGrid).
-    val cellHeight = min(cellWidth, (height - gridTop) / weeks)
+    // Clamped to >= 0 so a transient tiny layout (height <= header) can't
+    // produce an inverted grid.
+    val cellHeight = min(cellWidth, (height - gridTop) / weeks).coerceAtLeast(0f)
     val gridBottom = gridTop + cellHeight * weeks
     val leadingBlanks = month.atDay(1).dayOfWeek.value - 1 // Mon=0 … Sun=6
     return GridGeometry(
+        width = width.toFloat(),
+        height = height.toFloat(),
         headerHeight = headerHeight,
         cellWidth = cellWidth,
         cellHeight = cellHeight,
@@ -55,8 +61,11 @@ fun gridGeometry(month: YearMonth, width: Int, height: Int, density: Float): Gri
  */
 fun dateAtPoint(month: YearMonth, geom: GridGeometry, x: Float, y: Float): LocalDate? {
     if (y < geom.gridTop || y >= geom.gridBottom) return null
-    if (x < 0f || x >= geom.cellWidth * 7) return null
-    val col = (x / geom.cellWidth).toInt()
+    // Bound by the canvas width, not cellWidth * 7: float rounding could make
+    // cellWidth * 7 fall a fraction short of the width and reject the rightmost
+    // pixel column. The clamp keeps that edge in column 6.
+    if (x < 0f || x >= geom.width) return null
+    val col = min((x / geom.cellWidth).toInt(), 6)
     val row = ((y - geom.gridTop) / geom.cellHeight).toInt()
     if (col !in 0..6 || row !in 0 until geom.weeks) return null
     val day = row * 7 + col - geom.leadingBlanks + 1
@@ -81,4 +90,54 @@ fun bucketStrokesByDay(scribble: MonthScribble, density: Float): Map<LocalDate?,
         buckets.getOrPut(date) { mutableListOf() }.add(stroke)
     }
     return buckets
+}
+
+/**
+ * Rescales [strokes] captured on a [fromW]x[fromH] canvas to a [toW]x[toH]
+ * canvas *through the grid geometry*, so ink stays in the day cell it was
+ * written in. A plain linear rescale ([scaleStrokes]) drifts ink across cell
+ * boundaries because the grid has a fixed-height header band and a min-clamped
+ * (square) cell height — neither scales linearly with the canvas.
+ *
+ * x is a simple width scale (columns scale linearly). y is mapped band by band,
+ * using [gridGeometry] for both sizes as the single source of truth:
+ * - header band: kept as-is (the header height depends only on density);
+ * - day grid band: header subtracted, scaled by the cell-height ratio, new
+ *   header re-added — so a point keeps its row;
+ * - notes band below the grid: scaled within the leftover space.
+ *
+ * A no-op when the sizes match; falls back to [scaleStrokes] when either
+ * geometry is degenerate (unknown capture size or a zero-height grid).
+ */
+fun transformStrokesForGrid(
+    month: YearMonth,
+    strokes: List<StrokePath>,
+    fromW: Int,
+    fromH: Int,
+    toW: Int,
+    toH: Int,
+    density: Float,
+): List<StrokePath> {
+    if (fromW <= 0 || fromH <= 0) return strokes
+    if (fromW == toW && fromH == toH) return strokes
+    val from = gridGeometry(month, fromW, fromH, density)
+    val to = gridGeometry(month, toW, toH, density)
+    if (from.cellHeight <= 0f || to.cellHeight <= 0f) {
+        return scaleStrokes(strokes, fromW, fromH, toW, toH)
+    }
+    val sx = toW.toFloat() / fromW
+    val bandScale = to.cellHeight / from.cellHeight
+    val fromNotes = fromH - from.gridBottom
+    val toNotes = toH - to.gridBottom
+    val notesScale = if (fromNotes > 0f) toNotes / fromNotes else 1f
+    return strokes.map { stroke ->
+        stroke.map { (x, y) ->
+            val ny = when {
+                y < from.gridTop -> y // header band: same height on both canvases
+                y < from.gridBottom -> to.gridTop + (y - from.gridTop) * bandScale
+                else -> to.gridBottom + (y - from.gridBottom) * notesScale
+            }
+            x * sx to ny
+        }
+    }
 }

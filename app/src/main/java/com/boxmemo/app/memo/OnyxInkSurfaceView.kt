@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
+import android.os.Looper
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import com.onyx.android.sdk.data.note.TouchPoint
@@ -72,9 +73,21 @@ class OnyxInkSurfaceView(
             // any stray ink the firmware left on the raw layer.
             helper.setRawDrawingEnabled(false)
             redrawExistingStrokes(holder)
-        } else if (hasWindowFocus()) {
-            helper.setRawDrawingEnabled(true)
+        } else {
+            resumeRawDrawingIfAllowed()
         }
+    }
+
+    /**
+     * The single gate for turning raw pen capture back on. Every code path
+     * that toggles raw drawing off for a repaint/flush must come back through
+     * here, so a repaint can't silently undo [setPenCaptureSuspended] (the
+     * keyboard-ghost-stroke fix) or re-grab the pen while another window
+     * (e.g. a dialog) holds focus.
+     */
+    private fun resumeRawDrawingIfAllowed() {
+        if (penCaptureSuspended || !hasWindowFocus()) return
+        touchHelper?.setRawDrawingEnabled(true)
     }
 
     /**
@@ -109,7 +122,7 @@ class OnyxInkSurfaceView(
     fun flushAndGetStrokes(): List<StrokePath> {
         touchHelper?.let { helper ->
             helper.setRawDrawingEnabled(false)
-            helper.setRawDrawingEnabled(true)
+            resumeRawDrawingIfAllowed()
         }
         return currentStrokes.toList()
     }
@@ -147,7 +160,6 @@ class OnyxInkSurfaceView(
                 setStrokeWidth(penSettings.strokeWidth)
                 setStrokeColor(Color.BLACK)
                 openRawDrawing()
-                setRawDrawingEnabled(true)
             }
         } catch (e: Throwable) {
             // Not an Onyx device, or the pen service isn't available — no
@@ -155,6 +167,10 @@ class OnyxInkSurfaceView(
             // doesn't depend on having drawn anything via this surface.
             null
         }
+        // Gated: the surface may be (re)created while capture is suspended or
+        // another window holds focus, in which case capture stays off until
+        // the suspension lifts / focus returns.
+        resumeRawDrawingIfAllowed()
     }
 
     override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
@@ -170,7 +186,7 @@ class OnyxInkSurfaceView(
         helper.setRawDrawingEnabled(false)
         helper.setLimitRect(Rect(0, 0, width, height), ArrayList())
         redrawExistingStrokes(holder)
-        helper.setRawDrawingEnabled(true)
+        resumeRawDrawingIfAllowed()
     }
 
     override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -194,8 +210,8 @@ class OnyxInkSurfaceView(
     override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
         super.onWindowFocusChanged(hasWindowFocus)
         val helper = touchHelper ?: return
-        if (hasWindowFocus && !penCaptureSuspended) {
-            helper.setRawDrawingEnabled(true)
+        if (hasWindowFocus) {
+            resumeRawDrawingIfAllowed()
         } else {
             helper.setRawDrawingEnabled(false)
             redrawExistingStrokes(holder)
@@ -259,7 +275,7 @@ class OnyxInkSurfaceView(
         }
         helper.setRawDrawingEnabled(false)
         redrawExistingStrokes(holder)
-        helper.setRawDrawingEnabled(true)
+        resumeRawDrawingIfAllowed()
     }
 
     private fun redrawExistingStrokes(holder: SurfaceHolder) {
@@ -273,7 +289,14 @@ class OnyxInkSurfaceView(
             drawGuidelines(canvas)
             backgroundRenderer?.invoke(canvas, width, height)
             for (stroke in currentStrokes) {
-                if (stroke.size < 2) continue
+                if (stroke.isEmpty()) continue
+                if (stroke.size == 1) {
+                    // A 1-point stroke (i-dot, period) has no path to draw;
+                    // the round-capped stroke paint renders it as a dot.
+                    val (x, y) = stroke[0]
+                    canvas.drawPoint(x, y, paint)
+                    continue
+                }
                 val path = android.graphics.Path()
                 val (startX, startY) = stroke[0]
                 path.moveTo(startX, startY)
@@ -295,13 +318,17 @@ class OnyxInkSurfaceView(
 
         override fun onRawDrawingTouchPointListReceived(plist: TouchPointList) {
             val points = plist.points
-            if (points.size < 2) return
+            // Single-point strokes (i-dots, periods) are kept — dropping them
+            // lost real ink from recognition and diagrams.
+            if (points.isEmpty()) return
             val stroke = points.map { it.x to it.y }
-            if (isEraserActive) {
-                eraseWithPoints(stroke)
-            } else {
-                currentStrokes.add(stroke)
-                onStrokeFinished(stroke)
+            runOnUiThread {
+                if (isEraserActive) {
+                    eraseWithPoints(stroke)
+                } else {
+                    currentStrokes.add(stroke)
+                    onStrokeFinished(stroke)
+                }
             }
         }
 
@@ -312,8 +339,21 @@ class OnyxInkSurfaceView(
         override fun onRawErasingTouchPointListReceived(plist: TouchPointList?) {
             val erasePoints = plist?.points?.map { it.x to it.y } ?: return
             if (erasePoints.isEmpty()) return
-            eraseWithPoints(erasePoints)
+            runOnUiThread { eraseWithPoints(erasePoints) }
         }
+    }
+
+    /**
+     * Serializes stroke-data mutation onto the main thread. Onyx may deliver
+     * raw-input callbacks on its own input thread, which raced the UI thread's
+     * reads of [currentStrokes]/the store; the raw-latency path is unaffected
+     * because the firmware has already painted the ink. When the callback
+     * arrives synchronously on the main thread (the [flushAndGetStrokes]
+     * off→on toggle) the work runs inline, preserving flush's "stroke is in
+     * the list before flush returns" contract.
+     */
+    private fun runOnUiThread(action: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) action() else post { action() }
     }
 
     private fun eraseWithPoints(erasePoints: List<Pair<Float, Float>>) {

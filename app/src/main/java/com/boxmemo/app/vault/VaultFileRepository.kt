@@ -20,6 +20,22 @@ fun insertLines(content: String, atLine: Int, newLines: List<String>): String {
 }
 
 /**
+ * Writes [content] next to [file] as a `.tmp` sibling, then atomically renames
+ * it over the original (write-then-replace). Returns false on any I/O failure;
+ * a temp file left behind by a failed write or rename is deleted so no `.tmp`
+ * junk ends up in the LiveSync-synced vault.
+ */
+internal fun replaceFileAtomically(file: File, content: String): Boolean {
+    val tempFile = File(file.parentFile, "${file.name}.tmp")
+    return runCatching {
+        tempFile.writeText(content)
+        tempFile.renameTo(file)
+    }.getOrDefault(false).also { renamed ->
+        if (!renamed) tempFile.delete()
+    }
+}
+
+/**
  * Reads and writes arbitrary `.md` files anywhere in the vault, applying the
  * same write-then-replace discipline as [DailyNoteRepository] so a concurrently
  * running LiveSync watcher never observes a half-written file. This is the
@@ -28,18 +44,15 @@ fun insertLines(content: String, atLine: Int, newLines: List<String>): String {
 class VaultFileRepository {
 
     fun readFile(file: File): String? =
-        if (file.exists() && file.isFile) file.readText() else null
+        if (file.exists() && file.isFile) runCatching { file.readText() }.getOrNull() else null
 
     /**
      * Inserts [lines] into [file] at display-line [atLine] (see [insertLines]),
      * then atomically replaces the original. Returns false if the file can't be
-     * read or the rename fails.
+     * read or the write/rename fails.
      */
     fun insertLinesAt(file: File, atLine: Int, lines: List<String>): Boolean {
         val content = readFile(file) ?: return false
-        val updated = insertLines(content, atLine, lines)
-        val tempFile = File(file.parentFile, "${file.name}.tmp")
-        tempFile.writeText(updated)
-        return tempFile.renameTo(file)
+        return replaceFileAtomically(file, insertLines(content, atLine, lines))
     }
 }

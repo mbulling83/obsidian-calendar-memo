@@ -27,6 +27,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -38,6 +39,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.boxmemo.app.BuildConfig
 import com.boxmemo.app.hwr.HwrEngineType
 import com.boxmemo.app.hwr.MlKitHWREngine
@@ -45,6 +49,7 @@ import com.boxmemo.app.memo.PenSettingsStore
 import com.boxmemo.app.memo.PenType
 import com.boxmemo.app.vault.VaultSettings
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * Full settings page. Grouped into bordered cards rather than a flat scroll of
@@ -210,13 +215,38 @@ private fun VaultControls(
 ) {
     val savedVaultRoot by store.vaultRoot.collectAsState(initial = null)
     var vaultRootInput by remember(savedVaultRoot) { mutableStateOf(savedVaultRoot.orEmpty()) }
+    var savedMessage by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+
+    /** Persist [path] only if it's a real directory; report either way. */
+    fun saveVaultRoot(path: String) {
+        val trimmed = path.trim()
+        if (trimmed.isNotEmpty() && File(trimmed).isDirectory) {
+            scope.launch {
+                savedMessage = try {
+                    store.setVaultRoot(trimmed)
+                    "✓ Saved."
+                } catch (_: Exception) {
+                    "Couldn't save the vault path — try again."
+                }
+            }
+        } else {
+            savedMessage = "Couldn't find that folder — check the path (or type it manually) " +
+                "and that all-files access is granted."
+        }
+    }
 
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
     ) { treeUri ->
         if (treeUri != null) {
-            resolveAbsolutePathFromTreeUri(treeUri)?.let { resolvedPath -> vaultRootInput = resolvedPath }
+            val resolvedPath = resolveAbsolutePathFromTreeUri(treeUri)
+            if (resolvedPath != null && File(resolvedPath).isDirectory) {
+                vaultRootInput = resolvedPath
+                savedMessage = null
+            } else {
+                savedMessage = "Couldn't resolve that folder to a path — type the vault path manually instead."
+            }
         }
     }
 
@@ -226,7 +256,7 @@ private fun VaultControls(
     )
     OutlinedTextField(
         value = vaultRootInput,
-        onValueChange = { vaultRootInput = it },
+        onValueChange = { vaultRootInput = it; savedMessage = null },
         modifier = Modifier.fillMaxWidth(),
         label = { Text("Vault root path") },
         placeholder = { Text("/storage/emulated/0/Documents/MyVault") },
@@ -238,15 +268,27 @@ private fun VaultControls(
             modifier = Modifier.heightIn(min = 52.dp),
         ) { Text("Browse for folder") }
         Button(
-            onClick = { scope.launch { store.setVaultRoot(vaultRootInput) } },
+            onClick = { saveVaultRoot(vaultRootInput) },
             modifier = Modifier.heightIn(min = 52.dp),
         ) { Text("Save vault path") }
     }
+    savedMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 
     HorizontalDivider(thickness = 2.dp, modifier = Modifier.padding(vertical = 4.dp))
 
+    // Granting access happens on a system settings page outside the app, so
+    // re-read the status on ON_RESUME rather than only at first composition.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var allFilesAccessGranted by remember { mutableStateOf(hasAllFilesAccess()) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) allFilesAccessGranted = hasAllFilesAccess()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     Text(
-        if (hasAllFilesAccess()) "✓ All-files access granted" else "All-files access not granted",
+        if (allFilesAccessGranted) "✓ All-files access granted" else "All-files access not granted",
         style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.Bold,
     )
@@ -304,14 +346,20 @@ private fun SectionHeadingsControls(store: VaultSettingsStore) {
         onClick = {
             val meetings = meetingsInput.trim()
             val notes = notesInput.trim()
-            savedMessage = if (meetings.isBlank() || notes.isBlank()) {
-                "Both headings need some text."
+            if (meetings.isBlank() || notes.isBlank()) {
+                savedMessage = "Both headings need some text."
             } else {
+                // Confirm only after the writes commit — a failed edit
+                // shouldn't be reported as saved.
                 scope.launch {
-                    store.setMeetingsHeading(meetings)
-                    store.setNotesHeading(notes)
+                    savedMessage = try {
+                        store.setMeetingsHeading(meetings)
+                        store.setNotesHeading(notes)
+                        "✓ Saved."
+                    } catch (_: Exception) {
+                        "Couldn't save the headings — try again."
+                    }
                 }
-                "✓ Saved."
             }
         },
     ) { Text("Save section headings") }

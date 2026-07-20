@@ -3,6 +3,34 @@ package com.boxmemo.app.vault
 private val MEETING_LINE = Regex("""^- (\d{2}:\d{2}) - (\d{2}:\d{2}): (.+)$""")
 private val DETAIL_LINE = Regex("""^[\t ]+- """)
 
+/** True when an `HH:MM` string is a real time — downstream does `LocalTime.parse`, which throws on `24:00`. */
+internal fun isValidClockTime(time: String): Boolean {
+    val hour = time.substring(0, 2).toIntOrNull() ?: return false
+    val minute = time.substring(3, 5).toIntOrNull() ?: return false
+    return hour <= 23 && minute <= 59
+}
+
+/**
+ * Matches [line] as a meeting line, but only when both times are in range —
+ * a `- 24:00 - 25:00: …` line is treated as non-meeting content, not an entry.
+ */
+private fun meetingLineMatch(line: String): MatchResult? =
+    MEETING_LINE.matchEntire(line)?.takeIf {
+        isValidClockTime(it.groupValues[1]) && isValidClockTime(it.groupValues[2])
+    }
+
+/**
+ * Walks [index] back over blank lines (including the empty last element a
+ * trailing `"\n"` produces when splitting) so an insert at a section/block end
+ * lands directly after the last non-blank line — never below trailing blanks,
+ * and never past [floor].
+ */
+internal fun backOverBlankLines(lines: List<String>, index: Int, floor: Int): Int {
+    var i = index
+    while (i > floor && lines[i - 1].isBlank()) i--
+    return i
+}
+
 data class MeetingEntry(
     val startTime: String,
     val endTime: String,
@@ -71,7 +99,7 @@ fun parseMeetingsSection(
     var pendingMeeting: Triple<String, String, String>? = null
 
     for (line in sectionLines) {
-        val meetingMatch = MEETING_LINE.matchEntire(line)
+        val meetingMatch = meetingLineMatch(line)
         when {
             meetingMatch != null -> {
                 pendingMeeting?.let { (start, end, title) -> flushCurrent(start, end, title) }
@@ -113,7 +141,7 @@ fun insertMeeting(
 
     // Anchor = (absolute line index of a meeting line, its startTime).
     val anchors = (headingIndex + 1 until sectionEnd)
-        .mapNotNull { i -> MEETING_LINE.matchEntire(lines[i])?.let { i to it.groupValues[1] } }
+        .mapNotNull { i -> meetingLineMatch(lines[i])?.let { i to it.groupValues[1] } }
 
     val insertionIndex = when {
         anchors.isEmpty() -> headingIndex + 1
@@ -123,8 +151,11 @@ fun insertMeeting(
                 anchors.first().first
             } else {
                 val targetAnchorPos = anchors.indexOf(targetAnchor)
-                // End of the target anchor's block = next anchor's line, or section end.
-                anchors.getOrNull(targetAnchorPos + 1)?.first ?: sectionEnd
+                // End of the target anchor's block = next anchor's line, or the
+                // section end minus any trailing blanks (so an append lands
+                // directly under the last entry and a trailing "\n" survives).
+                anchors.getOrNull(targetAnchorPos + 1)?.first
+                    ?: backOverBlankLines(lines, sectionEnd, targetAnchor.first + 1)
             }
         }
     }
@@ -160,7 +191,7 @@ fun insertMeetingDetailBullets(
     val (headingIndex, sectionEnd) = bounds
 
     val anchors = (headingIndex + 1 until sectionEnd)
-        .filter { i -> MEETING_LINE.matchEntire(lines[i]) != null }
+        .filter { i -> meetingLineMatch(lines[i]) != null }
 
     val matching = anchors.filter { i ->
         val match = MEETING_LINE.matchEntire(lines[i])!!
@@ -176,8 +207,11 @@ fun insertMeetingDetailBullets(
 
     val anchorLine = matching.single()
     val anchorPos = anchors.indexOf(anchorLine)
-    // End of this meeting's block = the next meeting line, or the section end.
-    val blockEnd = anchors.getOrNull(anchorPos + 1) ?: sectionEnd
+    // End of this meeting's block = the next meeting line, or the section end
+    // minus any trailing blanks (so bullets land directly under the block and
+    // a trailing "\n" survives).
+    val blockEnd = anchors.getOrNull(anchorPos + 1)
+        ?: backOverBlankLines(lines, sectionEnd, anchorLine + 1)
     lines.addAll(blockEnd, bulletLines)
     return MeetingWriteResult.Updated(lines.joinToString("\n"))
 }

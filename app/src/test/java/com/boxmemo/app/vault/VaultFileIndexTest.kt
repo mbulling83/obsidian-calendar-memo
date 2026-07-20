@@ -67,6 +67,22 @@ class VaultFileIndexTest {
     }
 
     @Test
+    fun `search does not walk deeper than the depth cap`() {
+        var dir = tempFolder.root
+        // Depth 8 is beyond the walk's 7-level cap; depth 2 is within it.
+        repeat(8) { level ->
+            dir = dir.resolve("level${level + 1}").apply { mkdirs() }
+            if (level == 1) dir.resolve("Shallow.md").writeText("found")
+        }
+        dir.resolve("Deep.md").writeText("hidden")
+        val index = VaultFileIndex(tempFolder.root.path)
+
+        val results = index.search("md").map { it.name }
+
+        assertEquals(listOf("Shallow.md"), results)
+    }
+
+    @Test
     fun `null or non-directory root yields no entries`() {
         assertNull(VaultFileIndex(null).rootEntry())
         assertTrue(VaultFileIndex(null).search("x").isEmpty())

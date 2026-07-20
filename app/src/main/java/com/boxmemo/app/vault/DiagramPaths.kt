@@ -4,6 +4,7 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.WeekFields
+import java.util.Locale
 
 /**
  * Pure naming/path helpers for saved handwriting diagrams (PNG attachments).
@@ -16,7 +17,8 @@ import java.time.temporal.WeekFields
  * easy to scan and sort.
  */
 
-private val ILLEGAL_FILENAME = Regex("""[\\/:*?"<>|\[\]]""")
+// Includes `#` and `^`: Obsidian parses them as heading/block subpaths in `![[…]]` embeds.
+private val ILLEGAL_FILENAME = Regex("""[\\/:*?"<>|\[\]#^]""")
 private val WHITESPACE = Regex("""\s+""")
 private val TIME_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("HH.mm")
 
@@ -49,7 +51,8 @@ fun fileDiagramBaseName(date: LocalDate, time: LocalTime, fileName: String): Str
 fun diagramRelativeDir(date: LocalDate): String {
     val week = date.get(WeekFields.ISO.weekOfWeekBasedYear())
     val year = date.get(WeekFields.ISO.weekBasedYear())
-    return "attachments/Diagrams/%d/W%02d".format(year, week)
+    // Locale.ROOT so non-Latin-digit device locales can't corrupt paths.
+    return "attachments/Diagrams/%d/W%02d".format(Locale.ROOT, year, week)
 }
 
 /**

@@ -36,12 +36,19 @@ sealed interface DayEvent {
  * Merges Obsidian meetings and Google Calendar events into one
  * chronologically-sorted list. Ties are broken with Obsidian entries first,
  * then by title, for a stable and predictable order.
+ *
+ * A meeting whose start time doesn't parse as HH:MM (a hand-edited note can
+ * contain anything) is dropped here rather than crashing the day view in
+ * [DayEvent.ObsidianMeeting]'s initializer. Indices still reflect file order,
+ * so surviving meetings stay addressable in the note.
  */
 fun mergeDayEvents(
     meetings: List<MeetingEntry>,
     googleEvents: List<GoogleCalendarEvent>,
 ): List<DayEvent> {
-    val obsidianEvents = meetings.mapIndexed { index, entry -> DayEvent.ObsidianMeeting(entry, index) }
+    val obsidianEvents = meetings.mapIndexedNotNull { index, entry ->
+        runCatching { DayEvent.ObsidianMeeting(entry, index) }.getOrNull()
+    }
     val googleDayEvents = googleEvents.map { DayEvent.FromGoogleCalendar(it) }
 
     return (obsidianEvents + googleDayEvents).sortedWith(

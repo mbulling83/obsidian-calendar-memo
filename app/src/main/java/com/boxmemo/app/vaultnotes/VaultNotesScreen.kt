@@ -197,18 +197,27 @@ private fun TreeView(
     fileIndex: VaultFileIndex,
     onFileSelected: (File) -> Unit,
 ) {
-    val root = remember { fileIndex.rootEntry() }
-    if (root == null) {
-        Text(
-            text = "No vault configured. Set the vault path in Settings.",
-            style = MaterialTheme.typography.bodyMedium,
-            modifier = Modifier.padding(top = 12.dp),
-        )
+    // Resolved off the main thread — rootEntry() touches the filesystem.
+    var rootLoaded by remember { mutableStateOf(false) }
+    var root by remember { mutableStateOf<VaultEntry.Folder?>(null) }
+    LaunchedEffect(fileIndex) {
+        root = withContext(Dispatchers.IO) { fileIndex.rootEntry() }
+        rootLoaded = true
+    }
+    val rootEntry = root
+    if (rootEntry == null) {
+        if (rootLoaded) {
+            Text(
+                text = "No vault configured. Set the vault path in Settings.",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(top = 12.dp),
+            )
+        }
         return
     }
     Column(modifier = Modifier.fillMaxWidth().fillMaxHeight().verticalScroll(rememberScrollState())) {
         // The root's children are shown directly (no need to expand the root itself).
-        FolderChildren(fileIndex = fileIndex, dir = root.file, depth = 0, onFileSelected = onFileSelected)
+        FolderChildren(fileIndex = fileIndex, dir = rootEntry.file, depth = 0, onFileSelected = onFileSelected)
     }
 }
 
@@ -219,7 +228,11 @@ private fun FolderChildren(
     depth: Int,
     onFileSelected: (File) -> Unit,
 ) {
-    val children = remember(dir) { fileIndex.childrenOf(dir) }
+    // Listed off the main thread — childrenOf() touches the filesystem.
+    var children by remember(dir) { mutableStateOf<List<VaultEntry>>(emptyList()) }
+    LaunchedEffect(dir) {
+        children = withContext(Dispatchers.IO) { fileIndex.childrenOf(dir) }
+    }
     children.forEach { entry ->
         when (entry) {
             is VaultEntry.Folder -> FolderRow(fileIndex, entry, depth, onFileSelected)
@@ -292,9 +305,13 @@ private fun SearchView(
     val recentSearches by recentStore.recentSearches.collectAsState(initial = emptyList())
     val recentPaths by recentStore.recentFiles.collectAsState(initial = emptyList())
     // Drop any remembered files that have since been deleted/moved so we never
-    // offer a dead link.
-    val recentFiles = remember(recentPaths) {
-        recentPaths.map(::File).filter { it.exists() }
+    // offer a dead link. exists() hits the filesystem, so filter off the main
+    // thread.
+    var recentFiles by remember { mutableStateOf<List<File>>(emptyList()) }
+    LaunchedEffect(recentPaths) {
+        recentFiles = withContext(Dispatchers.IO) {
+            recentPaths.map(::File).filter { it.exists() }
+        }
     }
 
     val trimmed = query.trim()
@@ -416,11 +433,21 @@ private fun VaultFileEditor(
     var reloadKey by remember(strokeKey) { mutableIntStateOf(0) }
     var lines by remember(strokeKey) { mutableStateOf<List<String>>(emptyList()) }
     var insertIndex by remember(strokeKey) { mutableIntStateOf(0) }
+    // The (index, line count) of the last successful insert, consumed by the
+    // reload below so the marker advances past what was just inserted instead
+    // of snapping back to end-of-file after every convert.
+    var lastInsert by remember(strokeKey) { mutableStateOf<Pair<Int, Int>?>(null) }
     LaunchedEffect(strokeKey, reloadKey) {
         val content = withContext(Dispatchers.IO) { fileRepository.readFile(file) } ?: ""
         val loaded = content.split("\n")
         lines = loaded
-        insertIndex = loaded.size // default insert point: end of file
+        val inserted = lastInsert
+        lastInsert = null
+        insertIndex = if (inserted != null) {
+            insertIndexAfterInsert(inserted.first, inserted.second, loaded.size)
+        } else {
+            defaultInsertIndex(loaded)
+        }
     }
 
     @Suppress("UNUSED_EXPRESSION")
@@ -428,7 +455,9 @@ private fun VaultFileEditor(
     val strokes = strokeStore.strokesFor(strokeKey)
 
     fun flushStrokes(): List<StrokePath> {
-        val current = inkHandle.flush()
+        // A null flush means no surface was attached — fall back to the store's
+        // last known strokes instead of overwriting them with an empty list.
+        val current = inkHandle.flushOrNull() ?: return strokeStore.strokesFor(strokeKey)
         strokeStore.setStrokes(strokeKey, current)
         version++
         return current
@@ -530,6 +559,7 @@ private fun VaultFileEditor(
                                             if (wrote) {
                                                 strokeStore.clear(strokeKey)
                                                 version++
+                                                lastInsert = insertIndex to newLines.size
                                                 reloadKey++
                                                 statusMessage = "Converted and saved (${engine.label})."
                                             } else {
@@ -572,6 +602,7 @@ private fun VaultFileEditor(
                                             )
                                         }
                                         if (wrote) {
+                                            lastInsert = insertIndex to 1
                                             reloadKey++
                                             "Diagram saved."
                                         } else {
@@ -687,7 +718,7 @@ private fun FileContentPane(
     val bodyStart = remember(lines) { frontmatterEndIndex(lines) }
     Column(modifier = modifier.verticalScroll(rememberScrollState()).padding(horizontal = 8.dp)) {
         Text(
-            text = if (insertIndex >= lines.size) "Insert: end of file" else "Insert: at marked line",
+            text = if (insertIndex >= defaultInsertIndex(lines)) "Insert: end of file" else "Insert: at marked line",
             style = MaterialTheme.typography.bodySmall,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(vertical = 4.dp),

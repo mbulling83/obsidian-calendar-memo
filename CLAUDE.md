@@ -75,7 +75,7 @@ Target device: Boox U7 (and compatible Onyx Boox hardware running Android 10+, m
 
 **Vault health diagnostics**: `VaultScanner` samples the most recent resolved daily notes (looking back up to 120 days) and runs the pure `VaultDiagnostics.analyzeSamples` to produce a `VaultDiagnosis`: `Healthy`, `HeadingMismatch` (notes resolve but the configured meetings heading isn't present — recommends the heading where `HH:MM - HH:MM:` lines actually live), or `NoNotesFound` (nothing resolved — walks the vault for a date-named `.md` and recommends a corrected folder template via `inferTemplate`). The Calendar shows `VaultHealthBanner` for problem diagnoses; `VaultCheckScreen` (also from Settings) applies fixes with one tap. The scan runs off the main thread on vault-config change.
 
-**Daily note section format**: meetings live under `# 👥 Meetings` as `HH:MM - HH:MM: Title` lines; notes live under `# 📝 Notes` as `- bullet` lines. The two section headings are **user-configurable** (`VaultSettingsStore` → `VaultSettings.meetingsHeading`/`notesHeading`, defaulting to the emoji headings) and matched forgivingly via `vault/SectionHeading` — heading level (`#` vs `##`), surrounding whitespace, and case are all ignored, so a friend's `## Meetings` still resolves a configured `Meetings`. The section-aware parsers in `vault/` take the configured heading and operate only within that section's line range (heading → next ATX heading or `---`) — they never touch Dataview/DataviewJS blocks elsewhere in the file.
+**Daily note section format**: meetings live under `# 👥 Meetings` as `- HH:MM - HH:MM: Title` lines; notes live under `# 📝 Notes` as `- bullet` lines. The two section headings are **user-configurable** (`VaultSettingsStore` → `VaultSettings.meetingsHeading`/`notesHeading`, defaulting to the emoji headings) and matched forgivingly via `vault/SectionHeading` — heading level (`#` vs `##`), surrounding whitespace, and case are all ignored, so a friend's `## Meetings` still resolves a configured `Meetings`. The section-aware parsers in `vault/` take the configured heading and operate only within that section's line range (heading → next ATX heading or `---`) — they never touch Dataview/DataviewJS blocks elsewhere in the file.
 
 ### Google Calendar
 
@@ -91,12 +91,12 @@ The parsers and writers depend on this section structure in the daily note:
 
 ```markdown
 # 👥 Meetings
-09:00 - 10:00: Standup
+- 09:00 - 10:00: Standup
 	- some detail bullet
-10:30 - 11:00: 1:1 with [[Person]]
+- 10:30 - 11:00: 1:1 with [[Person]]
 
 # 📝 Notes
 - a note bullet
 ```
 
-Meetings section: each entry is `HH:MM - HH:MM: Title`, optionally followed by indented `\t- bullet` detail lines. New meetings are inserted in chronological order. New detail bullets are inserted under the matching start-time entry.
+Meetings section: each entry is `- HH:MM - HH:MM: Title`, optionally followed by indented `\t- bullet` detail lines. New meetings are inserted in chronological order. New detail bullets are inserted under the matching start-time entry.

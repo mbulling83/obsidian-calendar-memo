@@ -27,7 +27,7 @@ class VaultScanner(private val vaultSettings: VaultSettings) {
         val samples = mutableListOf<DailyNoteSample>()
         var day = today
         var checked = 0
-        while (checked <= lookBackDays && samples.size < maxSamples) {
+        while (checked < lookBackDays && samples.size < maxSamples) {
             val file = vaultSettings.resolveDailyNotePath(day)
             if (file != null && file.isFile) {
                 runCatching { file.readText() }.getOrNull()?.let { samples.add(DailyNoteSample(day, it)) }

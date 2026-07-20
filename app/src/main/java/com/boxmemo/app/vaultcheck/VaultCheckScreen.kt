@@ -21,12 +21,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.boxmemo.app.settings.resolveAbsolutePathFromTreeUri
 import com.boxmemo.app.vault.VaultDiagnosis
+import java.io.File
 
 /**
  * Diagnoses why no meetings are showing and offers one-tap fixes. Reachable
@@ -43,11 +48,21 @@ fun VaultCheckScreen(
     onRescan: () -> Unit,
     onBack: () -> Unit,
 ) {
+    // The URI→path conversion is best-effort; only apply a picked folder
+    // that's actually a directory, and say so when it isn't.
+    var pickerMessage by remember { mutableStateOf<String?>(null) }
     val folderPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
     ) { treeUri ->
         if (treeUri != null) {
-            resolveAbsolutePathFromTreeUri(treeUri)?.let { onApplyVaultRoot(it) }
+            val resolved = resolveAbsolutePathFromTreeUri(treeUri)
+            if (resolved != null && File(resolved).isDirectory) {
+                pickerMessage = null
+                onApplyVaultRoot(resolved)
+            } else {
+                pickerMessage = "Couldn't resolve that folder to a path — " +
+                    "type the vault path manually in Settings instead."
+            }
         }
     }
 
@@ -131,6 +146,8 @@ fun VaultCheckScreen(
                     }
                 }
             }
+
+            pickerMessage?.let { Body(it) }
 
             Spacer(Modifier.height(8.dp))
             HorizontalDivider(thickness = 2.dp)

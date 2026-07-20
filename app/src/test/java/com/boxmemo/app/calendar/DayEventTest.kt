@@ -59,6 +59,26 @@ class DayEventTest {
     }
 
     @Test
+    fun `drops meetings with unparseable start times instead of crashing`() {
+        val merged = mergeDayEvents(
+            meetings = listOf(
+                meeting("09:00", "09:30", "Standup"),
+                meeting("9am", "10am", "Hand-edited"),
+                meeting("25:99", "26:00", "Out of range"),
+                meeting("14:00", "15:00", "Design review"),
+            ),
+            googleEvents = emptyList(),
+        )
+
+        assertEquals(listOf("Standup", "Design review"), merged.map { it.title })
+        // Indices still reflect file order, so survivors stay addressable.
+        val byIndex = merged
+            .filterIsInstance<DayEvent.ObsidianMeeting>()
+            .associate { it.meetingIndex to it.title }
+        assertEquals(mapOf(0 to "Standup", 3 to "Design review"), byIndex)
+    }
+
+    @Test
     fun `an empty day with no meetings and no events merges to an empty list`() {
         val merged = mergeDayEvents(meetings = emptyList(), googleEvents = emptyList())
 

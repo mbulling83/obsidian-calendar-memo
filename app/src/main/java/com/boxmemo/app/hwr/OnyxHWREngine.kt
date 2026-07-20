@@ -13,14 +13,18 @@ import com.onyx.android.sdk.hwr.service.HWROutputArgs
 import com.onyx.android.sdk.hwr.service.HWROutputCallback
 import com.onyx.android.sdk.hwr.service.IHWRService
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.FileDescriptor
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+
+private const val RECOGNITION_TIMEOUT_MS = 10_000L
 
 /**
  * Binds to the Boox firmware's built-in MyScript handwriting recognizer
@@ -43,6 +47,11 @@ object OnyxHWREngine {
     @Volatile private var bound = false
     @Volatile private var initialized = false
     @Volatile private var connectLatch = CountDownLatch(1)
+    // True once bindService has registered [connection]; with BIND_AUTO_CREATE
+    // the framework re-delivers onServiceConnected after a service crash on its
+    // own, so binding again would stack bindings instead of reconnecting.
+    @Volatile private var connectionRegistered = false
+    private val bindMutex = Mutex()
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
@@ -55,6 +64,9 @@ object OnyxHWREngine {
             service = null
             bound = false
             initialized = false
+            // Re-arm the latch so a bindAndAwait during the outage waits for
+            // the framework's automatic reconnect instead of returning stale.
+            connectLatch = CountDownLatch(1)
         }
     }
 
@@ -62,36 +74,52 @@ object OnyxHWREngine {
     suspend fun bindAndAwait(context: Context, timeoutMs: Long = 2000): Boolean {
         if (bound && service != null) return true
 
-        connectLatch = CountDownLatch(1)
-        val intent = Intent().apply {
-            component = ComponentName("com.onyx.android.ksync", "com.onyx.android.ksync.service.KHwrService")
-        }
-        val bindStarted = try {
-            context.applicationContext.bindService(intent, connection, Context.BIND_AUTO_CREATE)
-        } catch (e: Exception) {
-            return false
-        }
-        if (!bindStarted) return false
+        // Serialized so two concurrent callers can't both call bindService
+        // (each successful call adds an independent binding to unwind).
+        bindMutex.withLock {
+            if (bound && service != null) return true
 
-        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            connectLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
-        } && service != null
+            if (!connectionRegistered) {
+                connectLatch = CountDownLatch(1)
+                val intent = Intent().apply {
+                    component = ComponentName("com.onyx.android.ksync", "com.onyx.android.ksync.service.KHwrService")
+                }
+                val bindStarted = try {
+                    context.applicationContext.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+                } catch (e: Exception) {
+                    return false
+                }
+                if (!bindStarted) return false
+                connectionRegistered = true
+            }
+
+            return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                connectLatch.await(timeoutMs, TimeUnit.MILLISECONDS)
+            } && service != null
+        }
     }
 
     fun unbind(context: Context) {
-        if (bound) {
+        if (connectionRegistered) {
             try {
                 context.applicationContext.unbindService(connection)
             } catch (_: Exception) {
             }
+            connectionRegistered = false
             bound = false
             service = null
             initialized = false
         }
     }
 
-    private suspend fun ensureInitialized(svc: IHWRService, viewWidth: Float, viewHeight: Float) {
-        if (initialized) return
+    /**
+     * Initializes the recognizer if needed. Returns false when the init call
+     * throws (dead binder), the callback reports the recognizer failed to
+     * activate, or no callback arrives within [RECOGNITION_TIMEOUT_MS] — so
+     * callers bail out instead of recognizing against an unready engine.
+     */
+    private suspend fun ensureInitialized(svc: IHWRService, viewWidth: Float, viewHeight: Float): Boolean {
+        if (initialized) return true
 
         val inputArgs = HWRInputArgs().apply {
             lang = "en_US"
@@ -102,54 +130,79 @@ object OnyxHWREngine {
             isTextEnable = true
         }
 
-        suspendCancellableCoroutine { cont ->
-            svc.init(inputArgs, true, object : HWROutputCallback.Stub() {
-                override fun read(args: HWROutputArgs?) {
-                    initialized = args?.recognizerActivated == true
-                    cont.resume(Unit)
+        val activated = withTimeoutOrNull(RECOGNITION_TIMEOUT_MS) {
+            suspendCancellableCoroutine<Boolean> { cont ->
+                // The binder callback may fire more than once; a second resume
+                // on the same continuation throws, so gate it.
+                val resumed = AtomicBoolean(false)
+                try {
+                    svc.init(inputArgs, true, object : HWROutputCallback.Stub() {
+                        override fun read(args: HWROutputArgs?) {
+                            if (resumed.compareAndSet(false, true)) {
+                                cont.resume(args?.recognizerActivated == true)
+                            }
+                        }
+                    })
+                } catch (e: Exception) {
+                    // RemoteException/DeadObjectException (service died) or a
+                    // RuntimeException rethrown across the binder — treat all
+                    // as "recognizer unavailable" rather than crashing.
+                    if (resumed.compareAndSet(false, true)) cont.resume(false)
                 }
-            })
-        }
+            }
+        } == true
+
+        initialized = activated
+        return activated
     }
 
     /**
      * Recognizes [strokes] using the built-in recognizer. Returns recognized
      * text, empty string for no-strokes/no-result, or null if the service
-     * isn't bound.
+     * isn't bound, couldn't initialize, or the recognize call failed.
      */
     suspend fun recognizeStrokes(strokes: List<StrokePath>, viewWidth: Float, viewHeight: Float): String? {
         val svc = service ?: return null
         if (strokes.isEmpty()) return ""
 
-        ensureInitialized(svc, viewWidth, viewHeight)
+        if (!ensureInitialized(svc, viewWidth, viewHeight)) return null
 
         val protoBytes = buildProtobuf(strokes, viewWidth, viewHeight)
         val pfd = createMemoryFilePfd(protoBytes) ?: return null
 
         return try {
-            withTimeoutOrNull(10_000) {
-                suspendCancellableCoroutine { cont ->
-                    svc.batchRecognize(pfd, object : HWROutputCallback.Stub() {
-                        override fun read(args: HWROutputArgs?) {
-                            try {
-                                val errorJson = args?.hwrResult
-                                if (!errorJson.isNullOrBlank()) {
-                                    cont.resume("")
-                                    return
+            withTimeoutOrNull(RECOGNITION_TIMEOUT_MS) {
+                suspendCancellableCoroutine<String?> { cont ->
+                    val resumed = AtomicBoolean(false)
+                    fun resumeOnce(value: String?) {
+                        if (resumed.compareAndSet(false, true)) cont.resume(value)
+                    }
+                    try {
+                        svc.batchRecognize(pfd, object : HWROutputCallback.Stub() {
+                            override fun read(args: HWROutputArgs?) {
+                                try {
+                                    val errorJson = args?.hwrResult
+                                    if (!errorJson.isNullOrBlank()) {
+                                        resumeOnce("")
+                                        return
+                                    }
+                                    val resultPfd = args?.pfd
+                                    if (resultPfd == null) {
+                                        resumeOnce("")
+                                        return
+                                    }
+                                    // `use` closes the fd even when parsing throws.
+                                    val json = resultPfd.use { readPfdAsString(it) }
+                                    resumeOnce(parseHwrResult(json))
+                                } catch (e: Exception) {
+                                    resumeOnce(null)
                                 }
-                                val resultPfd = args?.pfd
-                                if (resultPfd == null) {
-                                    cont.resume("")
-                                    return
-                                }
-                                val json = readPfdAsString(resultPfd)
-                                resultPfd.close()
-                                cont.resume(parseHwrResult(json))
-                            } catch (e: Exception) {
-                                cont.resumeWithException(e)
                             }
-                        }
-                    })
+                        })
+                    } catch (e: Exception) {
+                        // Binder call itself failed (service died mid-call).
+                        resumeOnce(null)
+                    }
                 }
             }
         } finally {
@@ -195,12 +248,13 @@ object OnyxHWREngine {
 
         for (stroke in strokes) {
             if (stroke.isEmpty()) continue
-            for ((i, point) in stroke.withIndex()) {
-                val eventType = when (i) {
-                    0 -> 0
-                    stroke.size - 1 -> 2
-                    else -> 1
-                }
+            // A 1-point stroke (an i-dot, a period) is emitted as a duplicated
+            // down+up pair so the recognizer sees the pen state close; see
+            // [strokeEventTypes].
+            val points = if (stroke.size == 1) listOf(stroke[0], stroke[0]) else stroke
+            val eventTypes = strokeEventTypes(stroke.size)
+            for ((i, point) in points.withIndex()) {
+                val eventType = eventTypes[i]
                 val timestamp = i * 10L
                 val pointerBytes = encodePointerProto(
                     x = point.first,
@@ -266,6 +320,25 @@ object OnyxHWREngine {
     private fun writeBytes(out: ByteArrayOutputStream, bytes: ByteArray) {
         writeVarint(out, bytes.size.toLong())
         out.write(bytes)
+    }
+
+    /**
+     * The per-point pointer eventType sequence for a stroke of [pointCount]
+     * points: down (0), moves (1), up (2). The up check runs *before* the down
+     * check so the final point of any stroke always closes the pen state; a
+     * single point is encoded as a down+up pair (the point is duplicated by
+     * the caller) rather than a lone down that leaves the stroke open.
+     */
+    internal fun strokeEventTypes(pointCount: Int): List<Int> = when {
+        pointCount <= 0 -> emptyList()
+        pointCount == 1 -> listOf(0, 2)
+        else -> List(pointCount) { i ->
+            when {
+                i == pointCount - 1 -> 2
+                i == 0 -> 0
+                else -> 1
+            }
+        }
     }
 
     /** Writes [data] to a MemoryFile and returns a dup'd ParcelFileDescriptor, via reflection (hidden API, requires hiddenapibypass). */

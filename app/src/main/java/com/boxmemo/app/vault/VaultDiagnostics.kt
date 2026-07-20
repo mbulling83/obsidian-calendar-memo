@@ -86,7 +86,11 @@ object VaultDiagnostics {
      */
     fun detectMeetingsHeading(content: String): String? {
         val lines = content.lines()
-        val firstMeeting = lines.indexOfFirst { MEETING_LINE.matches(it) }
+        val firstMeeting = lines.indexOfFirst { line ->
+            MEETING_LINE.matchEntire(line)?.let {
+                isValidClockTime(it.groupValues[1]) && isValidClockTime(it.groupValues[2])
+            } == true
+        }
         if (firstMeeting == -1) return null
         for (i in firstMeeting - 1 downTo 0) {
             if (SectionHeading.headingText(lines[i]) != null) return lines[i].trim()

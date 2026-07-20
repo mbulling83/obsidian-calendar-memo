@@ -20,6 +20,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +35,9 @@ import com.boxmemo.app.settings.DailyNoteStructureControls
 import com.boxmemo.app.settings.DailyNoteTemplateControls
 import com.boxmemo.app.settings.OnboardingSettingsStore
 import com.boxmemo.app.settings.VaultSettingsStore
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.boxmemo.app.settings.resolveAbsolutePathFromTreeUri
 import kotlinx.coroutines.launch
 import java.io.File
@@ -178,9 +182,18 @@ private fun PermissionStep(
     onRequestAllFilesAccess: () -> Unit,
     hasAllFilesAccess: () -> Boolean,
 ) {
-    // hasAllFilesAccess() reads live each recomposition; tapping the button
-    // leaves the app, so the status refreshes when the user returns.
-    val granted = hasAllFilesAccess()
+    // Tapping the button leaves the app for the system settings page, and
+    // nothing recomposes on return — so hold the status in state and refresh
+    // it on ON_RESUME, when the user comes back with (hopefully) the grant.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var granted by remember { mutableStateOf(hasAllFilesAccess()) }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) granted = hasAllFilesAccess()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     StepHeading("Allow access to your files")
     StepBody(

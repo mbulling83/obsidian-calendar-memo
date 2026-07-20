@@ -40,6 +40,9 @@ fun drawMonthGrid(
     if (width <= 0 || height <= 0) return
 
     val geom = gridGeometry(month, width, height, density)
+    // A transient tiny layout (height inside the header band) has no room for
+    // day cells — skip the draw rather than paint a degenerate grid.
+    if (geom.cellHeight <= 0f) return
     val headerHeight = geom.headerHeight
     val weeks = geom.weeks
     val cellWidth = geom.cellWidth

@@ -16,8 +16,17 @@ import androidx.compose.ui.viewinterop.AndroidView
 class InkFlushHandle {
     internal var surface: OnyxInkSurfaceView? = null
 
-    /** Flushes the pen buffer and returns all strokes now on the canvas. */
-    fun flush(): List<StrokePath> = surface?.flushAndGetStrokes().orEmpty()
+    /**
+     * Flushes the pen buffer and returns all strokes now on the canvas, or
+     * null when no surface is attached (e.g. mid-recomposition). Callers must
+     * treat null as "unknown" — falling back to their last known strokes —
+     * rather than as an empty canvas, or a transiently absent surface would
+     * wipe the store.
+     */
+    fun flushOrNull(): List<StrokePath>? = surface?.flushAndGetStrokes()
+
+    /** Like [flushOrNull], but treats a missing surface as an empty canvas. */
+    fun flush(): List<StrokePath> = flushOrNull().orEmpty()
 }
 
 /**

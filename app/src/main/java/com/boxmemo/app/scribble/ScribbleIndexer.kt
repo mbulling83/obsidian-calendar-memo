@@ -71,6 +71,11 @@ class ScribbleIndexer(
             }
         }
 
+        // Non-empty ink that recognised to nothing at all is treated like
+        // Unavailable: skip the write so a later flush retries, rather than
+        // recording a permanently empty index for the month.
+        if (dayText.isEmpty() && monthText.isBlank()) return@withContext
+
         writeIndexFile(ScribbleIndex(month, hash, dayText, monthText))
     }
 
@@ -98,13 +103,19 @@ class ScribbleIndexer(
     }
 
     private fun writeIndexFile(index: ScribbleIndex) {
-        if (!baseDir.exists()) baseDir.mkdirs()
-        val target = idxFile(index.month)
-        val tmp = File(baseDir, "${index.month}.idx.tmp")
-        tmp.writeText(serializeIndex(index))
-        if (!tmp.renameTo(target)) {
-            target.writeText(tmp.readText())
-            tmp.delete()
+        // The index is a rebuildable cache: any I/O failure here (including a
+        // lost race on the tmp file) just means a retry on a later flush, so
+        // nothing may throw out of the calling coroutine.
+        runCatching {
+            if (!baseDir.exists()) baseDir.mkdirs()
+            val target = idxFile(index.month)
+            // Unique tmp name so concurrent reindexes can't clobber each other.
+            val tmp = File.createTempFile("${index.month}.idx-", ".tmp", baseDir)
+            tmp.writeText(serializeIndex(index))
+            if (!tmp.renameTo(target)) {
+                runCatching { target.writeText(tmp.readText()) }
+                tmp.delete()
+            }
         }
     }
 }

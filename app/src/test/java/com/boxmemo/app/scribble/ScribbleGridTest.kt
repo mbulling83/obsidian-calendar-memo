@@ -57,6 +57,24 @@ class ScribbleGridTest {
     fun `a point below the grid resolves to null`() {
         assertNull(dateAtPoint(month, geom, width / 2f, geom.gridBottom + 1f))
     }
+
+    @Test
+    fun `the rightmost pixel column resolves to the last weekday column`() {
+        // July 2026 starts Wednesday (2 leading blanks), so row 0 col 6 is day 5.
+        val y = geom.gridTop + geom.cellHeight / 2f
+        assertEquals(LocalDate.of(2026, 7, 5), dateAtPoint(month, geom, width - 0.5f, y))
+        // At or beyond the canvas edge is out.
+        assertNull(dateAtPoint(month, geom, width.toFloat(), y))
+    }
+
+    @Test
+    fun `a canvas shorter than the header yields a zero-height grid, not an inverted one`() {
+        val tiny = gridGeometry(month, 700, 10, density = 1f)
+        assertTrue(tiny.cellHeight >= 0f)
+        assertEquals(tiny.gridTop, tiny.gridBottom)
+        // Nothing resolves to a date on a degenerate grid.
+        assertNull(dateAtPoint(month, tiny, 350f, 5f))
+    }
 }
 
 class BucketStrokesTest {
@@ -107,5 +125,105 @@ class BucketStrokesTest {
         val buckets = bucketStrokesByDay(scribble, density)
         assertEquals(setOf<LocalDate?>(null), buckets.keys)
         assertEquals(1, buckets[null]!!.size)
+    }
+}
+
+class TransformStrokesForGridTest {
+
+    // July 2026 (5 week rows, 2 leading blanks) on a 700-wide canvas at density
+    // 1: header 44px, 100px square cells (clamped by cellWidth), grid band
+    // 44..544, notes area below.
+    private val month = YearMonth.of(2026, 7)
+    private val density = 1f
+    private val fromW = 700
+    private val fromH = 744
+
+    private fun strokeInCell(date: LocalDate, w: Int, h: Int): StrokePath {
+        val geom = gridGeometry(month, w, h, density)
+        val leading = month.atDay(1).dayOfWeek.value - 1
+        val cellIndex = leading + date.dayOfMonth - 1
+        val cx = geom.cellWidth * (cellIndex % 7) + geom.cellWidth / 2f
+        val cy = geom.gridTop + geom.cellHeight * (cellIndex / 7) + geom.cellHeight / 2f
+        return listOf((cx - 5f) to (cy - 5f), (cx + 5f) to (cy + 5f))
+    }
+
+    private fun bucketOf(strokes: List<StrokePath>, w: Int, h: Int): Set<LocalDate?> =
+        bucketStrokesByDay(MonthScribble(month, w, h, strokes), density).keys
+
+    @Test
+    fun `height-only change keeps ink in its day cell where linear scaling would not`() {
+        // Cells are min-clamped square (100px) at both heights, so the grid band
+        // is identical — only the notes area grows. A linear rescale (744→1000)
+        // would push this row-3 stroke down out of its cell.
+        val date = LocalDate.of(2026, 7, 23)
+        val stroke = strokeInCell(date, fromW, fromH)
+        val toH = 1000
+
+        val moved = transformStrokesForGrid(month, listOf(stroke), fromW, fromH, fromW, toH, density)
+
+        assertEquals(setOf<LocalDate?>(date), bucketOf(moved, fromW, toH))
+        // Grid unchanged → ink over the grid must be untouched.
+        assertEquals(stroke, moved.single())
+        // Sanity: the naive linear rescale does lose the day (guards the test).
+        val linear = scaleStrokes(listOf(stroke), fromW, fromH, fromW, toH)
+        assertTrue(bucketOf(linear, fromW, toH) != setOf<LocalDate?>(date))
+    }
+
+    @Test
+    fun `shrinking the grid band rescales rows without changing the bucketed day`() {
+        // At 700x400 the cell height clamps to (400-44)/5 = 71.2px — the band
+        // genuinely scales, and every stroke must keep its day.
+        val dates = listOf(LocalDate.of(2026, 7, 1), LocalDate.of(2026, 7, 15), LocalDate.of(2026, 7, 31))
+        val strokes = dates.map { strokeInCell(it, fromW, fromH) }
+        val toH = 400
+
+        val moved = transformStrokesForGrid(month, strokes, fromW, fromH, fromW, toH, density)
+
+        assertEquals(dates.toSet(), bucketOf(moved, fromW, toH))
+    }
+
+    @Test
+    fun `width and height change together keeps every day bucket`() {
+        val dates = listOf(LocalDate.of(2026, 7, 5), LocalDate.of(2026, 7, 20))
+        val strokes = dates.map { strokeInCell(it, fromW, fromH) }
+        val toW = 1400
+        val toH = 1000
+
+        val moved = transformStrokesForGrid(month, strokes, fromW, fromH, toW, toH, density)
+
+        assertEquals(dates.toSet(), bucketOf(moved, toW, toH))
+    }
+
+    @Test
+    fun `header and notes ink stays month-level across a resize`() {
+        val headerStroke = listOf(10f to 5f, 20f to 10f)
+        val fromGeom = gridGeometry(month, fromW, fromH, density)
+        val notesStroke = listOf(50f to (fromGeom.gridBottom + 50f), 90f to (fromGeom.gridBottom + 60f))
+
+        val moved = transformStrokesForGrid(
+            month, listOf(headerStroke, notesStroke), fromW, fromH, fromW, 1000, density,
+        )
+
+        assertEquals(setOf<LocalDate?>(null), bucketOf(moved, fromW, 1000))
+        // The header band has the same height on both canvases: untouched.
+        assertEquals(headerStroke, moved.first())
+    }
+
+    @Test
+    fun `transform is a no-op when sizes match or the capture size is unknown`() {
+        val strokes = listOf(strokeInCell(LocalDate.of(2026, 7, 10), fromW, fromH))
+        assertEquals(strokes, transformStrokesForGrid(month, strokes, fromW, fromH, fromW, fromH, density))
+        assertEquals(strokes, transformStrokesForGrid(month, strokes, 0, 0, fromW, fromH, density))
+    }
+
+    @Test
+    fun `round trip through a resize returns ink to its day`() {
+        val date = LocalDate.of(2026, 7, 23)
+        val stroke = strokeInCell(date, fromW, fromH)
+
+        val there = transformStrokesForGrid(month, listOf(stroke), fromW, fromH, 1400, 400, density)
+        val back = transformStrokesForGrid(month, there, 1400, 400, fromW, fromH, density)
+
+        assertEquals(setOf<LocalDate?>(date), bucketOf(back, fromW, fromH))
     }
 }

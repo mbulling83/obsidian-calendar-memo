@@ -1,6 +1,8 @@
 package com.boxmemo.app.scribble
 
 import com.boxmemo.app.memo.StrokePath
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.time.YearMonth
 
@@ -109,23 +111,50 @@ fun scaleStrokes(
  */
 class MonthScribbleStore(val baseDir: File) {
 
+    // Serializes all save/load I/O: concurrent saves of the same month (e.g. a
+    // straggling autosave racing the exit save) must not interleave, and a load
+    // must never observe a half-finished replace.
+    private val mutex = Mutex()
+
     private fun fileFor(month: YearMonth) = File(baseDir, "$month.ink")
 
-    fun load(month: YearMonth): MonthScribble? {
+    suspend fun load(month: YearMonth): MonthScribble? = mutex.withLock {
         val file = fileFor(month)
-        if (!file.exists()) return null
-        return runCatching { deserializeMonthScribble(file.readText()) }.getOrNull()
+        if (!file.exists()) return@withLock null
+        val parsed = runCatching { deserializeMonthScribble(file.readText()) }.getOrNull()
+        if (parsed == null) {
+            // The file exists but can't be read/parsed. Preserve it before the
+            // app treats the month as empty — the next save would otherwise
+            // destroy whatever is left of the original.
+            backupCorrupt(file)
+        }
+        parsed
     }
 
-    fun save(scribble: MonthScribble) {
+    suspend fun save(scribble: MonthScribble): Unit = mutex.withLock {
         if (!baseDir.exists()) baseDir.mkdirs()
         val target = fileFor(scribble.month)
-        val tmp = File(baseDir, "${scribble.month}.ink.tmp")
+        // Unique tmp name: a fixed sibling name would let two in-flight saves
+        // clobber each other's tmp before the rename.
+        val tmp = File.createTempFile("${scribble.month}.ink-", ".tmp", baseDir)
         tmp.writeText(serializeMonthScribble(scribble))
         if (!tmp.renameTo(target)) {
             // renameTo can fail across some filesystems; fall back to a copy.
-            target.writeText(tmp.readText())
+            // runCatching: a lost race (tmp already gone) must not throw out of
+            // a fire-and-forget save.
+            runCatching { target.writeText(tmp.readText()) }
             tmp.delete()
         }
+    }
+
+    /** Renames a corrupt ink file to `<name>.corrupt-<n>`, never overwriting an earlier backup. */
+    private fun backupCorrupt(file: File) {
+        var n = 1
+        var backup = File(baseDir, "${file.name}.corrupt-$n")
+        while (backup.exists()) {
+            n++
+            backup = File(baseDir, "${file.name}.corrupt-$n")
+        }
+        runCatching { file.renameTo(backup) }
     }
 }

@@ -4,6 +4,7 @@ import android.content.Context
 import com.boxmemo.app.hwr.HwrEngineType
 import com.boxmemo.app.hwr.MlKitHWREngine
 import com.boxmemo.app.hwr.OnyxHWREngine
+import kotlinx.coroutines.CancellationException
 import kotlin.math.ceil
 
 private const val CAPTURE_MARGIN = 40
@@ -50,9 +51,23 @@ suspend fun recognizeStrokes(
             if (!OnyxHWREngine.bindAndAwait(context)) {
                 RecognitionOutcome.Unavailable("Onyx HWR unavailable.")
             } else {
-                RecognitionOutcome.Recognized(
-                    OnyxHWREngine.recognizeStrokes(strokes, width.toFloat(), height.toFloat()),
-                )
+                // A null result means the engine failed (init/timeout/binder
+                // death), not that the handwriting was blank — surface that as
+                // Unavailable so the user retries rather than seeing "Nothing
+                // recognized." Any exception the engine leaks maps the same
+                // way instead of crashing the calling coroutine.
+                val result = try {
+                    OnyxHWREngine.recognizeStrokes(strokes, width.toFloat(), height.toFloat())
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+                if (result == null) {
+                    RecognitionOutcome.Unavailable("Onyx HWR failed — try again.")
+                } else {
+                    RecognitionOutcome.Recognized(result)
+                }
             }
         }
         HwrEngineType.ML_KIT -> {
@@ -62,9 +77,18 @@ suspend fun recognizeStrokes(
                         "(connect to a network, or use the Download button in Settings).",
                 )
             } else {
-                RecognitionOutcome.Recognized(
-                    MlKitHWREngine.recognizeStrokes(strokes, width.toFloat(), height.toFloat()),
-                )
+                val result = try {
+                    MlKitHWREngine.recognizeStrokes(strokes, width.toFloat(), height.toFloat())
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                }
+                if (result == null) {
+                    RecognitionOutcome.Unavailable("ML Kit recognition failed — try again.")
+                } else {
+                    RecognitionOutcome.Recognized(result)
+                }
             }
         }
     }

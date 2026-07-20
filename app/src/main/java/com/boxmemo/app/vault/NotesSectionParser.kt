@@ -57,7 +57,10 @@ fun appendNoteLines(
     heading: String = VaultSettings.DEFAULT_NOTES_HEADING,
 ): NoteWriteResult {
     val allLines = noteContent.lines().toMutableList()
-    val (_, sectionEnd) = notesSectionRange(allLines, heading) ?: return NoteWriteResult.SectionNotFound
-    allLines.addAll(sectionEnd, lines)
+    val (start, sectionEnd) = notesSectionRange(allLines, heading) ?: return NoteWriteResult.SectionNotFound
+    // Skip back over trailing blanks (including the empty last element a
+    // trailing "\n" produces) so bullets land directly under the section's
+    // last non-blank line and the file's trailing newline survives.
+    allLines.addAll(backOverBlankLines(allLines, sectionEnd, start), lines)
     return NoteWriteResult.Updated(allLines.joinToString("\n"))
 }

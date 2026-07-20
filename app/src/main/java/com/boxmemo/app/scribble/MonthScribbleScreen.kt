@@ -54,8 +54,13 @@ import com.boxmemo.app.memo.InkFlushHandle
 import com.boxmemo.app.memo.MemoCanvas
 import com.boxmemo.app.memo.PenSettings
 import com.boxmemo.app.memo.StrokePath
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.boxmemo.app.settings.HwrSettingsStore
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -93,7 +98,18 @@ fun MonthScribbleScreen(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
-    val today = remember { LocalDate.now() }
+
+    // Recomputed on resume: the screen can sit for days on an always-on e-ink
+    // device, and a one-shot remember would leave the marker on the wrong day.
+    var today by remember { mutableStateOf(LocalDate.now()) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) today = LocalDate.now()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     var month by remember { mutableStateOf(YearMonth.now()) }
     var isEraser by remember { mutableStateOf(false) }
@@ -127,26 +143,46 @@ fun MonthScribbleScreen(
     var strokes by remember { mutableStateOf<List<StrokePath>>(emptyList()) }
     var canvasW by remember { mutableIntStateOf(0) }
     var canvasH by remember { mutableIntStateOf(0) }
+    // The canvas size the in-memory strokes are currently expressed in — set
+    // when a month's ink loads or when a canvas resize transforms the strokes.
+    var strokesW by remember { mutableIntStateOf(0) }
+    var strokesH by remember { mutableIntStateOf(0) }
+    // True while a month's ink is loading from disk. Saves are suppressed then:
+    // a save mid-load would write the previous month's (or empty) strokes into
+    // the newly displayed month's file.
+    var loading by remember { mutableStateOf(true) }
     val inkHandle = remember(month) { InkFlushHandle() }
 
     // Debounced autosave: bumped on every stroke/erase.
     var saveTick by remember { mutableIntStateOf(0) }
 
-    // saveCurrent() is closed over by navigation/dispose; keep its captures fresh.
-    val state = rememberUpdatedState(
-        Triple(month, canvasW to canvasH, strokes),
-    )
+    // Survives the composition: the final save on dispose must not die with
+    // rememberCoroutineScope, which is cancelled right after onDispose runs.
+    val exitScope = remember { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
+
     // [flush] toggles the pen's raw-drawing layer to drain any buffered stroke,
     // which also wipes the on-screen ink (the surface doesn't repaint after a
     // flush). So only flush when we're leaving the month anyway — the periodic
     // autosave persists the `strokes` state directly (every completed stroke is
     // already delivered there via onStrokeFinished), leaving the canvas intact.
-    fun saveCurrent(flush: Boolean) {
-        val (m, dims, currentState) = state.value
-        val (w, h) = dims
+    // [expectedMonth] guards a stale debounced autosave: if the displayed month
+    // has changed since the save was scheduled, the save is aborted rather than
+    // written into the wrong month's file.
+    fun saveCurrent(
+        flush: Boolean,
+        expectedMonth: YearMonth? = null,
+        scope: CoroutineScope = coroutineScope,
+    ) {
+        if (loading) return
+        val m = month
+        if (expectedMonth != null && m != expectedMonth) return
+        // Save at the size the strokes are actually expressed in, which can lag
+        // the live canvas by one transform pass.
+        val w = if (strokesW > 0) strokesW else canvasW
+        val h = if (strokesH > 0) strokesH else canvasH
         if (w <= 0 || h <= 0) return
-        val current = if (flush) inkHandle.flush().ifEmpty { currentState } else currentState
-        coroutineScope.launch(Dispatchers.IO) {
+        val current = if (flush) inkHandle.flush().ifEmpty { strokes } else strokes
+        scope.launch(Dispatchers.IO) {
             store.save(MonthScribble(m, w, h, current))
             // Refresh the search index for the month we're leaving. (A backfill on
             // open is the safety net if this is cut short by the screen closing.)
@@ -159,6 +195,11 @@ fun MonthScribbleScreen(
         saveCurrent(flush = true)
         isEraser = false
         highlightDay = null
+        saveTick = 0 // any pending autosave belonged to the month we just saved
+        // Set eagerly (the load effect sets it too): no save may run between
+        // the switch and the new month's ink arriving, or the old month's
+        // strokes would land in the new month's file.
+        loading = true
         month = target
     }
 
@@ -167,6 +208,8 @@ fun MonthScribbleScreen(
         if (hit.month != month) {
             saveCurrent(flush = true)
             isEraser = false
+            saveTick = 0
+            loading = true // see goTo: no save until the new month's ink loads
             month = hit.month
         }
         highlightDay = hit.day
@@ -190,15 +233,22 @@ fun MonthScribbleScreen(
         indexer.backfill()
     }
 
-    LaunchedEffect(saveTick) {
+    // Keyed on month as well as the tick so a month switch cancels any pending
+    // autosave (goTo flush-saves the old month itself); the captured month is
+    // double-checked in saveCurrent in case the switch races the delay.
+    LaunchedEffect(saveTick, month) {
         if (saveTick == 0) return@LaunchedEffect
+        val target = month
         delay(AUTOSAVE_DELAY_MS)
-        saveCurrent(flush = false)
+        saveCurrent(flush = false, expectedMonth = target)
     }
 
-    // Save the month currently on screen when leaving the screen.
+    // Save the month currently on screen when leaving the screen. The stroke
+    // flush runs synchronously inside saveCurrent; the write itself goes to
+    // exitScope, which outlives the composition (rememberCoroutineScope is
+    // cancelled straight after dispose and would drop the write).
     DisposableEffect(Unit) {
-        onDispose { saveCurrent(flush = true) }
+        onDispose { saveCurrent(flush = true, scope = exitScope) }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -288,16 +338,51 @@ fun MonthScribbleScreen(
             canvasH = h
             val densityValue = density.density
 
-            // Load (and rescale) this month's ink whenever the month or the
-            // canvas size changes.
-            LaunchedEffect(month, w, h) {
-                if (w <= 0 || h <= 0) return@LaunchedEffect
+            // Load this month's ink whenever the month changes. Keyed on the
+            // month ONLY: a canvas resize (e.g. the search results panel
+            // opening) must not reload from disk — that would drop strokes the
+            // debounced autosave hasn't written yet. Resizes are handled by the
+            // in-memory transform effect below.
+            LaunchedEffect(month) {
+                loading = true
                 val loaded = withContext(Dispatchers.IO) { store.load(month) }
-                strokes = if (loaded == null) {
-                    emptyList()
+                val targetW = canvasW
+                val targetH = canvasH
+                if (loaded == null) {
+                    strokes = emptyList()
+                    strokesW = targetW
+                    strokesH = targetH
+                } else if (targetW > 0 && targetH > 0) {
+                    strokes = transformStrokesForGrid(
+                        month, loaded.strokes,
+                        loaded.captureWidth, loaded.captureHeight,
+                        targetW, targetH, densityValue,
+                    )
+                    strokesW = targetW
+                    strokesH = targetH
                 } else {
-                    scaleStrokes(loaded.strokes, loaded.captureWidth, loaded.captureHeight, w, h)
+                    // Canvas not measured yet: keep the ink at its stored size;
+                    // the transform effect below rescales once dims arrive.
+                    strokes = loaded.strokes
+                    strokesW = loaded.captureWidth
+                    strokesH = loaded.captureHeight
                 }
+                loading = false
+            }
+
+            // A pure canvas-size change transforms the in-memory strokes to the
+            // new size — grid-aware, so ink stays in the day cell it was
+            // written in (the header band is fixed-height and cells are
+            // min-clamped square, so a plain linear rescale would drift ink
+            // across cell boundaries).
+            LaunchedEffect(w, h) {
+                if (loading || w <= 0 || h <= 0) return@LaunchedEffect
+                if (strokesW == w && strokesH == h) return@LaunchedEffect
+                if (strokesW > 0 && strokesH > 0) {
+                    strokes = transformStrokesForGrid(month, strokes, strokesW, strokesH, w, h, densityValue)
+                }
+                strokesW = w
+                strokesH = h
             }
 
             // key(month): a new month means a fresh surface seeded with that
@@ -305,8 +390,9 @@ fun MonthScribbleScreen(
             // other screens.
             // key includes highlightDay so a search jump (or clearing the
             // highlight by writing) repaints the background grid; the surface is
-            // reseeded with the current strokes, so the ink is preserved.
-            androidx.compose.runtime.key(month, penSettings, highlightDay) {
+            // reseeded with the current strokes, so the ink is preserved. today
+            // is keyed too so the marker moves when the date rolls over on resume.
+            androidx.compose.runtime.key(month, penSettings, highlightDay, today) {
                 MemoCanvas(
                     strokes = strokes,
                     penSettings = penSettings,

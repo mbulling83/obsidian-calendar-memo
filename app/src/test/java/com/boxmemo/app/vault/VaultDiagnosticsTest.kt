@@ -80,6 +80,12 @@ class VaultDiagnosticsTest {
     }
 
     @Test
+    fun `detectMeetingsHeading ignores lines with out-of-range times`() {
+        val content = "# Calendar\n- 24:00 - 25:00: Late\n- 09:75 - 10:00: Bad"
+        assertNull(VaultDiagnostics.detectMeetingsHeading(content))
+    }
+
+    @Test
     fun `no recommendation when there are no meeting-time lines at all`() {
         val notes = listOf(sample("# Journal\n- just freeform text\n- more text"))
         val result = VaultDiagnostics.analyzeSamples(notes, "# Meetings", "# Notes") as VaultDiagnosis.HeadingMismatch

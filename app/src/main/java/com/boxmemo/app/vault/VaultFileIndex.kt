@@ -51,18 +51,28 @@ class VaultFileIndex(private val vaultRoot: String?) {
     /**
      * All `.md` files in the vault whose filename contains [query]
      * (case-insensitive), sorted by name. A blank query returns nothing. Hidden
-     * folders are skipped.
+     * folders are skipped. The walk is bounded (depth and visited-entry caps,
+     * mirroring [VaultScanner]'s findDatedNote) so a pathological vault can't
+     * hang the search.
      */
     fun search(query: String): List<VaultEntry.MarkdownFile> {
         val needle = query.trim().lowercase()
         if (needle.isEmpty()) return emptyList()
         val start = root() ?: return emptyList()
+        var visited = 0
         return start.walkTopDown()
+            .maxDepth(MAX_SEARCH_DEPTH)
             .onEnter { !it.name.startsWith(".") }
+            .takeWhile { ++visited <= MAX_SEARCH_VISITED }
             .filter { it.isFile && it.extension.equals("md", ignoreCase = true) }
             .filter { it.name.lowercase().contains(needle) }
             .sortedBy { it.name.lowercase() }
             .map(VaultEntry::MarkdownFile)
             .toList()
+    }
+
+    private companion object {
+        const val MAX_SEARCH_DEPTH = 7
+        const val MAX_SEARCH_VISITED = 20_000
     }
 }

@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.boxmemo.app.vault.VaultSettings
 import kotlinx.coroutines.launch
+import java.io.File
 
 /**
  * Reusable settings controls for the daily-note folder structure and the
@@ -64,19 +65,33 @@ fun DailyNoteStructureControls(store: VaultSettingsStore, modifier: Modifier = M
             Button(
                 onClick = {
                     val trimmed = templateInput.trim()
-                    savedMessage = if (!trimmed.contains("{isoDate}")) {
-                        "The template must include {isoDate} so each day maps to its own file."
+                    if (!trimmed.contains("{isoDate}")) {
+                        savedMessage = "The template must include {isoDate} so each day maps to its own file."
                     } else {
-                        scope.launch { store.setDailyNoteTemplate(trimmed) }
-                        "✓ Saved."
+                        // Confirm only once the write commits, so a failed
+                        // save isn't reported as "✓ Saved.".
+                        scope.launch {
+                            savedMessage = try {
+                                store.setDailyNoteTemplate(trimmed)
+                                "✓ Saved."
+                            } catch (_: Exception) {
+                                "Couldn't save the folder template — try again."
+                            }
+                        }
                     }
                 },
             ) { Text("Save folder template") }
             OutlinedButton(
                 onClick = {
                     templateInput = VaultSettings.DEFAULT_TEMPLATE
-                    scope.launch { store.setDailyNoteTemplate(VaultSettings.DEFAULT_TEMPLATE) }
-                    savedMessage = "✓ Reset to default."
+                    scope.launch {
+                        savedMessage = try {
+                            store.setDailyNoteTemplate(VaultSettings.DEFAULT_TEMPLATE)
+                            "✓ Reset to default."
+                        } catch (_: Exception) {
+                            "Couldn't reset the folder template — try again."
+                        }
+                    }
                 },
             ) { Text("Reset") }
         }
@@ -109,12 +124,26 @@ fun DailyNoteTemplateControls(store: VaultSettingsStore, vaultRoot: String?, mod
         contract = ActivityResultContracts.OpenDocument(),
     ) { uri ->
         if (uri != null) {
-            toStoredPath(resolveAbsolutePathFromDocumentUri(uri))?.let { picked ->
-                pathInput = picked
-                // Auto-save on pick so a browsed path can't be lost (matches the
-                // vault step). Manual text edits still use the Save button.
-                scope.launch { store.setDailyNoteTemplatePath(picked) }
-                savedMessage = "✓ Saved."
+            // Only persist a resolved path that's actually a readable file —
+            // the URI→path conversion is best-effort and must not silently
+            // save garbage.
+            val absolute = resolveAbsolutePathFromDocumentUri(uri)
+            if (absolute != null && File(absolute).isFile) {
+                toStoredPath(absolute)?.let { picked ->
+                    pathInput = picked
+                    // Auto-save on pick so a browsed path can't be lost (matches the
+                    // vault step). Manual text edits still use the Save button.
+                    scope.launch {
+                        savedMessage = try {
+                            store.setDailyNoteTemplatePath(picked)
+                            "✓ Saved."
+                        } catch (_: Exception) {
+                            "Couldn't save the template path — try again."
+                        }
+                    }
+                }
+            } else {
+                savedMessage = "Couldn't resolve that file to a path — type the template path manually instead."
             }
         }
     }
@@ -141,16 +170,28 @@ fun DailyNoteTemplateControls(store: VaultSettingsStore, vaultRoot: String?, mod
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Button(
                 onClick = {
-                    scope.launch { store.setDailyNoteTemplatePath(pathInput) }
-                    savedMessage =
-                        if (pathInput.isBlank()) "✓ Cleared — new notes use the section headings." else "✓ Saved."
+                    val cleared = pathInput.isBlank()
+                    scope.launch {
+                        savedMessage = try {
+                            store.setDailyNoteTemplatePath(pathInput)
+                            if (cleared) "✓ Cleared — new notes use the section headings." else "✓ Saved."
+                        } catch (_: Exception) {
+                            "Couldn't save the template path — try again."
+                        }
+                    }
                 },
             ) { Text("Save template") }
             OutlinedButton(
                 onClick = {
                     pathInput = ""
-                    scope.launch { store.setDailyNoteTemplatePath("") }
-                    savedMessage = "✓ Cleared — new notes use the section headings."
+                    scope.launch {
+                        savedMessage = try {
+                            store.setDailyNoteTemplatePath("")
+                            "✓ Cleared — new notes use the section headings."
+                        } catch (_: Exception) {
+                            "Couldn't clear the template path — try again."
+                        }
+                    }
                 },
             ) { Text("Clear") }
         }

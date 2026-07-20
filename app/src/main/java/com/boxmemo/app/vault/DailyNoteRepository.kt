@@ -1,6 +1,5 @@
 package com.boxmemo.app.vault
 
-import java.io.File
 import java.time.LocalDate
 
 sealed interface DailyNoteReadResult {
@@ -73,7 +72,10 @@ class DailyNoteRepository(private val vaultSettings: VaultSettings) {
             vaultSettings.defaultNoteScaffold()
         }
 
-        path.parentFile?.mkdirs()
+        // mkdirs() returns false both on failure and when the folders already
+        // exist, so re-check before giving up.
+        val parent = path.parentFile
+        if (parent != null && !(parent.mkdirs() || parent.isDirectory)) return NoteCreateOutcome.WriteFailed
         return if (writeNote(date, body)) NoteCreateOutcome.Created(usedTemplate) else NoteCreateOutcome.WriteFailed
     }
 
@@ -81,7 +83,8 @@ class DailyNoteRepository(private val vaultSettings: VaultSettings) {
         val path = vaultSettings.resolveDailyNotePath(date)
             ?: return DailyNoteReadResult.VaultNotConfigured
         if (!path.exists()) return DailyNoteReadResult.NoteDoesNotExist
-        return DailyNoteReadResult.Found(path.readText())
+        return runCatching { DailyNoteReadResult.Found(path.readText()) }
+            .getOrDefault(DailyNoteReadResult.NoteDoesNotExist)
     }
 
     fun readMeetings(date: LocalDate): MeetingSectionParseResult? {
@@ -104,9 +107,7 @@ class DailyNoteRepository(private val vaultSettings: VaultSettings) {
      */
     fun writeNote(date: LocalDate, newContent: String): Boolean {
         val path = vaultSettings.resolveDailyNotePath(date) ?: return false
-        val tempFile = File(path.parentFile, "${path.name}.tmp")
-        tempFile.writeText(newContent)
-        return tempFile.renameTo(path)
+        return replaceFileAtomically(path, newContent)
     }
 
     /**
@@ -116,17 +117,17 @@ class DailyNoteRepository(private val vaultSettings: VaultSettings) {
      */
     fun addMeeting(date: LocalDate, entry: MeetingEntry): NoteWriteOutcome = withNoteContent(date) { content ->
         when (val result = insertMeeting(content, entry, vaultSettings.meetingsHeading)) {
-            is MeetingWriteResult.Updated -> writeOutcome(date, result.content)
+            is MeetingWriteResult.Updated -> NoteEdit.NewContent(result.content)
             // insertMeeting only ever yields Updated or SectionNotFound.
-            else -> NoteWriteOutcome.SectionMissing
+            else -> NoteEdit.Failed(NoteWriteOutcome.SectionMissing)
         }
     }
 
     /** Adds a new plain note bullet via the quick-add form (R5/R6). */
     fun addNote(date: LocalDate, text: String): NoteWriteOutcome = withNoteContent(date) { content ->
         when (val result = appendNoteBullet(content, text, vaultSettings.notesHeading)) {
-            is NoteWriteResult.Updated -> writeOutcome(date, result.content)
-            NoteWriteResult.SectionNotFound -> NoteWriteOutcome.SectionMissing
+            is NoteWriteResult.Updated -> NoteEdit.NewContent(result.content)
+            NoteWriteResult.SectionNotFound -> NoteEdit.Failed(NoteWriteOutcome.SectionMissing)
         }
     }
 
@@ -150,39 +151,63 @@ class DailyNoteRepository(private val vaultSettings: VaultSettings) {
             val result =
                 insertMeetingDetailBullets(content, startTime, endTime, title, bulletLines, vaultSettings.meetingsHeading)
         ) {
-            is MeetingWriteResult.Updated -> writeOutcome(date, result.content)
-            MeetingWriteResult.SectionNotFound -> NoteWriteOutcome.SectionMissing
-            MeetingWriteResult.MeetingNotFound -> NoteWriteOutcome.MeetingNotFound
-            MeetingWriteResult.AmbiguousMeeting -> NoteWriteOutcome.AmbiguousMeeting
+            is MeetingWriteResult.Updated -> NoteEdit.NewContent(result.content)
+            MeetingWriteResult.SectionNotFound -> NoteEdit.Failed(NoteWriteOutcome.SectionMissing)
+            MeetingWriteResult.MeetingNotFound -> NoteEdit.Failed(NoteWriteOutcome.MeetingNotFound)
+            MeetingWriteResult.AmbiguousMeeting -> NoteEdit.Failed(NoteWriteOutcome.AmbiguousMeeting)
         }
     }
 
     /** Writes converted handwriting bullets under the page-level Notes section (R10). */
     fun addNoteLines(date: LocalDate, lines: List<String>): NoteWriteOutcome = withNoteContent(date) { content ->
         when (val result = appendNoteLines(content, lines, vaultSettings.notesHeading)) {
-            is NoteWriteResult.Updated -> writeOutcome(date, result.content)
-            NoteWriteResult.SectionNotFound -> NoteWriteOutcome.SectionMissing
+            is NoteWriteResult.Updated -> NoteEdit.NewContent(result.content)
+            NoteWriteResult.SectionNotFound -> NoteEdit.Failed(NoteWriteOutcome.SectionMissing)
         }
     }
 
-    /**
-     * Reads the note, mapping the unreadable cases to outcomes before running
-     * [block]. When the note is missing and auto-create is enabled, it's created
-     * from the configured template first so the user's edit isn't dropped.
-     */
-    private inline fun withNoteContent(date: LocalDate, block: (String) -> NoteWriteOutcome): NoteWriteOutcome =
-        when (val read = readNote(date)) {
-            is DailyNoteReadResult.Found -> block(read.content)
-            DailyNoteReadResult.NoteDoesNotExist -> {
-                val created = vaultSettings.autoCreateMissingNotes && createNote(date) is NoteCreateOutcome.Created
-                when (val reread = if (created) readNote(date) else read) {
-                    is DailyNoteReadResult.Found -> block(reread.content)
-                    else -> NoteWriteOutcome.NoteMissing
-                }
-            }
-            DailyNoteReadResult.VaultNotConfigured -> NoteWriteOutcome.VaultNotConfigured
-        }
+    /** What an edit [block] concluded: new content to write, or a terminal outcome. */
+    private sealed interface NoteEdit {
+        data class NewContent(val content: String) : NoteEdit
+        data class Failed(val outcome: NoteWriteOutcome) : NoteEdit
+    }
 
-    private fun writeOutcome(date: LocalDate, content: String): NoteWriteOutcome =
-        if (writeNote(date, content)) NoteWriteOutcome.Written else NoteWriteOutcome.WriteFailed
+    /**
+     * Runs a read-modify-write: reads the note, mapping the unreadable cases to
+     * outcomes, applies [block], and writes the result. When the note is
+     * missing and auto-create is enabled, it's created from the configured
+     * template first so the user's edit isn't dropped — and re-read regardless
+     * of the create outcome, so a note that appeared concurrently (LiveSync)
+     * is edited rather than reported missing. If the file's lastModified
+     * changed between the read and the write (a concurrent LiveSync pull), the
+     * read-modify-write is re-run once against the fresh content; a second
+     * conflict proceeds with the write rather than looping forever.
+     */
+    private inline fun withNoteContent(date: LocalDate, block: (String) -> NoteEdit): NoteWriteOutcome {
+        val path = vaultSettings.resolveDailyNotePath(date) ?: return NoteWriteOutcome.VaultNotConfigured
+        var retried = false
+        while (true) {
+            var readStamp = path.lastModified()
+            val content = when (val read = readNote(date)) {
+                is DailyNoteReadResult.Found -> read.content
+                DailyNoteReadResult.NoteDoesNotExist -> {
+                    if (!vaultSettings.autoCreateMissingNotes) return NoteWriteOutcome.NoteMissing
+                    createNote(date)
+                    readStamp = path.lastModified()
+                    (readNote(date) as? DailyNoteReadResult.Found)?.content
+                        ?: return NoteWriteOutcome.NoteMissing
+                }
+                DailyNoteReadResult.VaultNotConfigured -> return NoteWriteOutcome.VaultNotConfigured
+            }
+            val newContent = when (val edit = block(content)) {
+                is NoteEdit.NewContent -> edit.content
+                is NoteEdit.Failed -> return edit.outcome
+            }
+            if (!retried && path.lastModified() != readStamp) {
+                retried = true
+                continue
+            }
+            return if (writeNote(date, newContent)) NoteWriteOutcome.Written else NoteWriteOutcome.WriteFailed
+        }
+    }
 }

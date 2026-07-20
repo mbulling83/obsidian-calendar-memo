@@ -1,7 +1,5 @@
 package com.boxmemo.app.calendar
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.boxmemo.app.gcal.GoogleCalendarRepository
 import com.boxmemo.app.vault.DailyNoteReadResult
 import com.boxmemo.app.vault.DailyNoteRepository
@@ -9,7 +7,12 @@ import com.boxmemo.app.vault.MeetingEntry
 import com.boxmemo.app.vault.MeetingSectionParseResult
 import com.boxmemo.app.vault.NoteCreateOutcome
 import com.boxmemo.app.vault.NoteWriteOutcome
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,11 +35,18 @@ data class DayUiState(
  * Obsidian daily note and Google Calendar whenever the selected date
  * changes, so switching days never shows stale data from the previous
  * selection.
+ *
+ * A plain class (not an androidx ViewModel): MainActivity rebuilds it whenever
+ * the vault settings change, so lifecycle-owned clearing would never run.
+ * Instead it owns its own scope, and the host calls [dispose] when replacing
+ * an instance so stale loads can't leak or write into the new state.
  */
 class DayViewModel(
     private val dailyNoteRepository: DailyNoteRepository,
     private val googleCalendarRepository: GoogleCalendarRepository,
-) : ViewModel() {
+) {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var loadJob: Job? = null
 
     private val _uiState = MutableStateFlow(DayUiState(date = LocalDate.now()))
     val uiState: StateFlow<DayUiState> = _uiState.asStateFlow()
@@ -53,15 +63,24 @@ class DayViewModel(
         selectDate(LocalDate.now())
     }
 
+    /** Cancels in-flight work; call when this instance is replaced or discarded. */
+    fun dispose() {
+        scope.cancel()
+    }
+
     fun selectDate(date: LocalDate) {
+        // Cancel any in-flight load so a slow read of a previously selected
+        // date can't finish late and overwrite this newer selection.
+        loadJob?.cancel()
         _uiState.value = DayUiState(date = date, meetingsHeading = dailyNoteRepository.meetingsHeading, isLoading = true)
-        viewModelScope.launch(Dispatchers.IO) {
+        loadJob = scope.launch(Dispatchers.IO) {
             val noteExists = dailyNoteRepository.readNote(date) is DailyNoteReadResult.Found
             val meetingsResult = dailyNoteRepository.readMeetings(date)
             val meetings = (meetingsResult as? MeetingSectionParseResult.Found)?.entries.orEmpty()
             val noteLines = dailyNoteRepository.readNotes(date)
             val googleEvents = googleCalendarRepository.fetchEvents(date)
 
+            ensureActive()
             _uiState.value = DayUiState(
                 date = date,
                 events = mergeDayEvents(meetings, googleEvents),
@@ -80,7 +99,7 @@ class DayViewModel(
      * note), then refreshes so the new note's sections appear.
      */
     fun createDailyNote() {
-        viewModelScope.launch(Dispatchers.IO) {
+        scope.launch(Dispatchers.IO) {
             _message.value = when (val outcome = dailyNoteRepository.createNote(uiState.value.date)) {
                 is NoteCreateOutcome.Created ->
                     if (outcome.usedTemplate) "Created today's note from your template." else "Created today's note."
@@ -96,7 +115,7 @@ class DayViewModel(
 
     /** Quick-add a new meeting (R5/R6), then refresh the day view. */
     fun addMeeting(startTime: String, endTime: String, title: String) {
-        viewModelScope.launch(Dispatchers.IO) {
+        scope.launch(Dispatchers.IO) {
             val outcome = dailyNoteRepository.addMeeting(
                 uiState.value.date,
                 MeetingEntry(startTime, endTime, title, emptyList()),
@@ -108,7 +127,7 @@ class DayViewModel(
 
     /** Quick-add a new note bullet (R5/R6), then refresh the day view. */
     fun addNote(text: String) {
-        viewModelScope.launch(Dispatchers.IO) {
+        scope.launch(Dispatchers.IO) {
             val outcome = dailyNoteRepository.addNote(uiState.value.date, text)
             _message.value = quickAddMessage(outcome, "note", dailyNoteRepository.notesHeading)
             selectDate(uiState.value.date)

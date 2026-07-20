@@ -14,8 +14,7 @@ dependencyResolutionManagement {
         // not on Maven Central or Google's repo. Used by U7 for the
         // built-in MyScript handwriting recognition AIDL service.
         maven {
-            url = uri("http://repo.boox.com/repository/maven-public/")
-            isAllowInsecureProtocol = true
+            url = uri("https://repo.boox.com/repository/maven-public/")
         }
     }
 }

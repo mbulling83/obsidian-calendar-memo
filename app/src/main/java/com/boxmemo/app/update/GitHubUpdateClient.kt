@@ -49,7 +49,9 @@ class GitHubUpdateClient(
             for (i in 0 until assets.length()) {
                 val asset = assets.getJSONObject(i)
                 if (asset.optString("name").endsWith(".apk", ignoreCase = true)) {
-                    apkUrl = asset.optString("browser_download_url").ifBlank { null }
+                    apkUrl = asset.optString("browser_download_url")
+                        .ifBlank { null }
+                        ?.takeIf { isTrustedApkUrl(it) }
                     if (apkUrl != null) break
                 }
             }
@@ -64,6 +66,22 @@ class GitHubUpdateClient(
             null
         } finally {
             conn?.disconnect()
+        }
+    }
+
+    companion object {
+        /**
+         * Only accept APK download URLs that are https and hosted by GitHub —
+         * a compromised or spoofed API response must not be able to point the
+         * installer at an arbitrary server.
+         */
+        internal fun isTrustedApkUrl(raw: String): Boolean {
+            val url = runCatching { URL(raw) }.getOrNull() ?: return false
+            if (!url.protocol.equals("https", ignoreCase = true)) return false
+            val host = url.host.orEmpty().lowercase()
+            return host == "github.com" ||
+                host == "objects.githubusercontent.com" ||
+                host.endsWith(".githubusercontent.com")
         }
     }
 }

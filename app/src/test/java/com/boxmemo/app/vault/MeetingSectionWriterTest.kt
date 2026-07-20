@@ -63,6 +63,15 @@ class MeetingSectionWriterTest {
     }
 
     @Test
+    fun `appending at the section end lands under the last entry and keeps the trailing newline`() {
+        val content = "# 👥 Meetings\n- 09:00 - 09:30: Standup\n"
+
+        val result = insertMeeting(content, newEntry("11:00", "11:30", "Review")) as MeetingWriteResult.Updated
+
+        assertEquals("# 👥 Meetings\n- 09:00 - 09:30: Standup\n- 11:00 - 11:30: Review\n", result.content)
+    }
+
+    @Test
     fun `returns SectionNotFound when the daily note has no Meetings heading`() {
         val content = """
             # 📝 Notes

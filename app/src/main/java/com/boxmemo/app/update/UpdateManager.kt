@@ -36,9 +36,26 @@ class UpdateManager(
 
     /** Throttled check run once per app launch; no-op if checked recently. */
     suspend fun checkOnLaunch(minIntervalMs: Long = 24 * 60 * 60 * 1000L) {
+        restorePersistedUpdate()
         if (!store.autoCheckEnabled.first()) return
         if (now() - store.lastCheckMs() < minIntervalMs) return
         runCheck()
+    }
+
+    /**
+     * Re-shows the banner for an update a previous launch already found — the
+     * throttle would otherwise hide it for up to a day after process death.
+     * Clears the stored release once it's no longer newer (i.e. installed).
+     */
+    private suspend fun restorePersistedUpdate() {
+        val saved = store.availableRelease() ?: return
+        if (UpdateVersions.isNewer(saved.version, currentVersion)) {
+            if (_state.value is UpdateUiState.Hidden) {
+                _state.value = UpdateUiState.Available(saved)
+            }
+        } else {
+            store.setAvailableRelease(null)
+        }
     }
 
     /** Force an immediate check (e.g. a Settings button); returns the outcome. */
@@ -53,15 +70,22 @@ class UpdateManager(
 
     /** Fetch + apply to [state]; returns the release fetched (or null on error). */
     private suspend fun runCheck(): LatestRelease? {
-        val latest = client.fetchLatest()
+        // Only mark the check done on success — a failed fetch (offline,
+        // rate-limited) shouldn't start the daily throttle, so connectivity
+        // returning gets a fresh check on the next launch.
+        val latest = client.fetchLatest() ?: return null
         store.setLastCheckMs(now())
-        if (latest != null && UpdateVersions.isNewer(latest.version, currentVersion)) {
+        if (UpdateVersions.isNewer(latest.version, currentVersion)) {
+            store.setAvailableRelease(latest)
             // Don't clobber an in-flight download.
             if (_state.value !is UpdateUiState.Downloading) {
                 _state.value = UpdateUiState.Available(latest)
             }
-        } else if (_state.value !is UpdateUiState.Downloading) {
-            _state.value = UpdateUiState.Hidden
+        } else {
+            store.setAvailableRelease(null)
+            if (_state.value !is UpdateUiState.Downloading) {
+                _state.value = UpdateUiState.Hidden
+            }
         }
         return latest
     }

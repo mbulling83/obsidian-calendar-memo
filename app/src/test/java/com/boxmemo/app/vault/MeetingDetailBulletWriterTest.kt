@@ -62,6 +62,21 @@ class MeetingDetailBulletWriterTest {
     }
 
     @Test
+    fun `appending to the last meeting lands under its block and keeps the trailing newline`() {
+        val content = "# 👥 Meetings\n- 09:00 - 09:30: Standup\n"
+
+        val result = insertMeetingDetailBullets(
+            content,
+            startTime = "09:00",
+            endTime = "09:30",
+            title = "Standup",
+            bulletLines = listOf("\t- New point"),
+        ) as MeetingWriteResult.Updated
+
+        assertEquals("# 👥 Meetings\n- 09:00 - 09:30: Standup\n\t- New point\n", result.content)
+    }
+
+    @Test
     fun `returns MeetingNotFound when no meeting matches the identity`() {
         val content = """
             # 👥 Meetings

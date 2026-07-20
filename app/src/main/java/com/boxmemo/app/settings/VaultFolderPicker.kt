@@ -39,6 +39,11 @@ fun resolveAbsolutePathFromTreeUri(treeUri: Uri): String? {
  */
 fun resolveAbsolutePathFromDocumentUri(documentUri: Uri): String? {
     val documentId = runCatching { DocumentsContract.getDocumentId(documentUri) }.getOrNull() ?: return null
+    // The Downloads provider hands back "raw:<absolute path>" for files it
+    // stores directly on disk — the embedded path is already what we want.
+    if (documentId.startsWith("raw:")) {
+        return documentId.removePrefix("raw:").takeIf { it.startsWith("/") }
+    }
     val parts = documentId.split(":", limit = 2)
     if (parts.size != 2) return null
     val (volumeId, relativePath) = parts

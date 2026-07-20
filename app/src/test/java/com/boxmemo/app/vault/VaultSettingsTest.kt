@@ -46,6 +46,24 @@ class VaultSettingsTest {
     }
 
     @Test
+    fun `default scaffold uses the configured headings verbatim`() {
+        val settings = VaultSettings(vaultRoot = "/vault")
+
+        assertEquals("# 👥 Meetings\n\n# 📝 Notes\n", settings.defaultNoteScaffold())
+    }
+
+    @Test
+    fun `default scaffold prefixes bare configured headings so the parsers can find them`() {
+        val settings = VaultSettings(
+            vaultRoot = "/vault",
+            meetingsHeading = "Meetings",
+            notesHeading = "## Journal",
+        )
+
+        assertEquals("# Meetings\n\n## Journal\n", settings.defaultNoteScaffold())
+    }
+
+    @Test
     fun `returns null when vault root is blank`() {
         val settings = VaultSettings(vaultRoot = "   ")
 

@@ -15,6 +15,12 @@ class DiagramPathsTest {
     }
 
     @Test
+    fun `sanitize strips Obsidian heading and block subpath chars`() {
+        // `#` and `^` are parsed as heading/block subpaths inside `![[...]]` embeds.
+        assertEquals("Sprint 12 review", sanitizeDiagramName("Sprint #12 ^review"))
+    }
+
+    @Test
     fun `meeting base name uses date, dotted start time and sanitized title`() {
         val base = meetingDiagramBaseName(
             date = LocalDate.of(2026, 6, 21),

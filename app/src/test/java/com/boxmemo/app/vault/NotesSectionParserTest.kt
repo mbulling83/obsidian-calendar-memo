@@ -57,6 +57,22 @@ class NotesSectionParserTest {
     }
 
     @Test
+    fun `appending to a file ending in a newline lands under the last bullet and keeps the trailing newline`() {
+        val result = appendNoteLines("# 📝 Notes\n- a\n", listOf("- b")) as NoteWriteResult.Updated
+
+        assertEquals("# 📝 Notes\n- a\n- b\n", result.content)
+    }
+
+    @Test
+    fun `appending skips back over trailing blank lines in the section`() {
+        val content = "# 📝 Notes\n- a\n\n\n---\n# 👥 Meetings\n"
+
+        val result = appendNoteBullet(content, "b") as NoteWriteResult.Updated
+
+        assertEquals("# 📝 Notes\n- a\n- b\n\n\n---\n# 👥 Meetings\n", result.content)
+    }
+
+    @Test
     fun `reads existing note bullets, dropping blank lines`() {
         val content = """
             # 📝 Notes

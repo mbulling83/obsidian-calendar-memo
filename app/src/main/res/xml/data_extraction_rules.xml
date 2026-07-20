@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    API 31+ backup/transfer rules. The scribble calendar ink under
+    filesDir/month-scribbles/ is deliberately device-local (see scribble/) —
+    keep it out of cloud backup and device-to-device transfer.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="month-scribbles/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="month-scribbles/" />
+    </device-transfer>
+</data-extraction-rules>

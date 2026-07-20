@@ -64,7 +64,13 @@ class VaultSettings(
      * the template can't be read): just the two configured section headings, so
      * the parsers and quick-add have somewhere to write.
      */
-    fun defaultNoteScaffold(): String = "$meetingsHeading\n\n$notesHeading\n"
+    fun defaultNoteScaffold(): String = "${asAtxHeading(meetingsHeading)}\n\n${asAtxHeading(notesHeading)}\n"
+
+    // A heading configured as bare text (e.g. "Meetings") is matched forgivingly
+    // when reading, but a written scaffold needs real ATX headings for the
+    // parsers to find its sections.
+    private fun asAtxHeading(heading: String): String =
+        if (heading.trimStart().startsWith("#")) heading else "# $heading"
 
     private fun renderTemplate(template: String, date: LocalDate): String {
         return template
@@ -78,7 +84,8 @@ class VaultSettings(
         /** The `{monthFolder}` token's value for [date], e.g. "06 - June". */
         fun monthFolderFor(date: LocalDate): String {
             val monthName = date.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH)
-            return "%02d - %s".format(date.monthValue, monthName)
+            // Locale.ROOT so non-Latin-digit device locales can't corrupt paths.
+            return "%02d - %s".format(Locale.ROOT, date.monthValue, monthName)
         }
 
         /**

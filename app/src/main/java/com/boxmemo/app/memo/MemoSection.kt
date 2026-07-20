@@ -194,10 +194,14 @@ fun MemoSection(
                 {
                     // Flush the pen buffer, push any just-finished stroke into
                     // the store, and hand the caller the full, current list.
-                    val current = inkHandle.flush()
-                    strokeStore.setStrokes(date, selectedScope, current)
-                    version++
-                    current
+                    // A null flush means no surface was attached — keep the
+                    // store as-is and fall back to it, rather than wiping it.
+                    val current = inkHandle.flushOrNull()
+                    if (current != null) {
+                        strokeStore.setStrokes(date, selectedScope, current)
+                        version++
+                    }
+                    current ?: strokeStore.strokesFor(date, selectedScope)
                 },
             ) {
                 strokeStore.clear(date, selectedScope)
@@ -222,9 +226,14 @@ fun MemoSection(
                     // Flush first so ink written since the last store update is
                     // counted — otherwise a canvas that looks full reads as
                     // empty and the action no-ops until the user navigates away.
-                    val current = inkHandle.flush()
-                    strokeStore.setStrokes(date, selectedScope, current)
-                    version++
+                    // A null flush (no surface) falls back to the store rather
+                    // than overwriting it with an empty list.
+                    val flushed = inkHandle.flushOrNull()
+                    if (flushed != null) {
+                        strokeStore.setStrokes(date, selectedScope, flushed)
+                        version++
+                    }
+                    val current = flushed ?: strokeStore.strokesFor(date, selectedScope)
                     if (current.isEmpty()) return@AssistChip
                     showEraseAllConfirm = true
                 },

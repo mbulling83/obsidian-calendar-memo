@@ -1,6 +1,7 @@
 package com.boxmemo.app.vault
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -280,6 +281,23 @@ class DailyNoteRepositoryTest {
 
         assertEquals(NoteWriteOutcome.NoteMissing, outcome)
         assertTrue(repo.readNote(date) is DailyNoteReadResult.NoteDoesNotExist)
+    }
+
+    @Test
+    fun `writeNote returns false instead of throwing when the note's folder does not exist`() {
+        val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
+
+        assertFalse(repo.writeNote(LocalDate.of(2026, 6, 17), "content"))
+    }
+
+    @Test
+    fun `createNote reports WriteFailed when a file blocks the note's folder path`() {
+        // A plain file where the "Periodic Notes" folder should be makes mkdirs fail.
+        tempFolder.newFile("Periodic Notes")
+
+        val repo = DailyNoteRepository(VaultSettings(tempFolder.root.path))
+
+        assertEquals(NoteCreateOutcome.WriteFailed, repo.createNote(LocalDate.of(2026, 6, 25)))
     }
 
     @Test

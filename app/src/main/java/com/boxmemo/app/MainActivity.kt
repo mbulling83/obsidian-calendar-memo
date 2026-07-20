@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -124,6 +125,12 @@ class MainActivity : ComponentActivity() {
                     }
                     val viewModel = remember(dailyNoteRepository) {
                         DayViewModel(dailyNoteRepository, NoOpGoogleCalendarRepository)
+                    }
+                    // Rebuilding on settings change means lifecycle clearing never
+                    // runs — cancel the replaced instance's scope explicitly so
+                    // each vault-config change can't leak a live coroutine scope.
+                    DisposableEffect(viewModel) {
+                        onDispose { viewModel.dispose() }
                     }
                     val vaultFileRepository = remember { VaultFileRepository() }
                     val diagramRepository = remember(vaultRoot) { DiagramRepository(vaultRoot) }

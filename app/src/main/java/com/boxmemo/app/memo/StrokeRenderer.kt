@@ -51,7 +51,14 @@ fun renderStrokesToBitmap(strokes: List<StrokePath>, penSettings: PenSettings): 
     val dx = DIAGRAM_PADDING - minX
     val dy = DIAGRAM_PADDING - minY
     for (stroke in strokes) {
-        if (stroke.size < 2) continue
+        if (stroke.isEmpty()) continue
+        if (stroke.size == 1) {
+            // A 1-point stroke (i-dot, period) renders as a dot via the
+            // round-capped stroke paint.
+            val (x, y) = stroke[0]
+            canvas.drawPoint(x + dx, y + dy, paint)
+            continue
+        }
         val path = Path()
         val (sx, sy) = stroke[0]
         path.moveTo(sx + dx, sy + dy)

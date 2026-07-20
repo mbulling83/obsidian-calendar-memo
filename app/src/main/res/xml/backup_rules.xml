@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Pre-API-31 counterpart of data_extraction_rules.xml: keep the device-local
+    scribble calendar ink out of auto backup.
+-->
+<full-backup-content>
+    <exclude domain="file" path="month-scribbles/" />
+</full-backup-content>
