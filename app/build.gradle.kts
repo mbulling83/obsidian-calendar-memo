@@ -22,8 +22,8 @@ android {
         applicationId = "com.boxmemo.app"
         minSdk = 29
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.4.3"
+        versionCode = 10
+        versionName = "0.5.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
