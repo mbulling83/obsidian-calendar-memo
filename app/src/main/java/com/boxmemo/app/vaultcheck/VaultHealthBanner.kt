@@ -38,6 +38,9 @@ fun VaultHealthBanner(
 
     Surface(
         tonalElevation = 0.dp,
+        // Pale-red wash carries the warning on colour panels; on B&W it reads
+        // as a light-grey card, so the 2dp border stays the real cue.
+        color = MaterialTheme.colorScheme.errorContainer,
         border = androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface),
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
     ) {

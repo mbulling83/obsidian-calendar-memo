@@ -93,7 +93,7 @@ fun DayEventList(
                         .fillMaxWidth()
                         .clickable { onScopeSelected(CaptureScope.Notes) }
                         .then(
-                            if (isSelected) Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
+                            if (isSelected) Modifier.background(MaterialTheme.colorScheme.primaryContainer)
                             else Modifier
                         )
                         .padding(vertical = 6.dp, horizontal = 4.dp),
@@ -141,7 +141,7 @@ private fun ObsidianMeetingRow(
             .fillMaxWidth()
             .clickable { onScopeSelected(scope) }
             .then(
-                if (isSelected) Modifier.background(MaterialTheme.colorScheme.secondaryContainer)
+                if (isSelected) Modifier.background(MaterialTheme.colorScheme.primaryContainer)
                 else Modifier
             )
             .padding(vertical = 4.dp, horizontal = 4.dp),

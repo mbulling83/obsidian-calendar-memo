@@ -52,6 +52,9 @@ fun UpdateBanner(
 
     Surface(
         tonalElevation = 0.dp,
+        // Pale-green wash reads as "good news" on colour panels; on B&W it's
+        // a light-grey card and the 2dp border stays the real cue.
+        color = MaterialTheme.colorScheme.tertiaryContainer,
         border = BorderStroke(2.dp, MaterialTheme.colorScheme.onSurface),
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
     ) {
